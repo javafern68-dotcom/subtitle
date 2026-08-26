@@ -85,15 +85,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v1.0.0"
+          $tag = "v1.0.1"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
               "installer\Bangla_Subtitle_Studio_Setup_V1.exe" `
               "installer\Bangla_Subtitle_Studio_Setup_V1.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V1" `
-              --notes "Complete Windows installer with bundled Python runtime and FFmpeg. Install it once, then launch Bangla Subtitle Studio from the desktop or Start menu."
+              --title "Bangla Subtitle Studio V1.0.1" `
+              --notes "Startup fix for the Color tab. Complete Windows installer with bundled Python runtime and FFmpeg. This installer upgrades the existing installation."
           }
           else {
             gh release upload $tag `

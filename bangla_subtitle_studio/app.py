@@ -23,7 +23,7 @@ from .transcription import TranscriptionError, transcribe_video, validate_api_ke
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "1.0"
+APP_VERSION = "1.0.1"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা": "bn",
@@ -357,11 +357,13 @@ class BanglaSubtitleStudio(tk.Tk):
 
     def _build_color_tab(self, parent: tk.Misc) -> None:
         presets = self._section(parent, "Ready Color Collection")
+        preset_grid = ttk.Frame(presets, style="Card.TFrame")
+        preset_grid.pack(fill="x")
         preset_values = ["Natural", "Warm", "Cool", "Cinematic", "Vivid", "B&W"]
         for index, name in enumerate(preset_values):
-            ttk.Button(presets, text=name, command=lambda value=name: self.apply_preset(value)).grid(row=index // 2, column=index % 2, sticky="ew", padx=3, pady=3)
-        presets.columnconfigure(0, weight=1)
-        presets.columnconfigure(1, weight=1)
+            ttk.Button(preset_grid, text=name, command=lambda value=name: self.apply_preset(value)).grid(row=index // 2, column=index % 2, sticky="ew", padx=3, pady=3)
+        preset_grid.columnconfigure(0, weight=1)
+        preset_grid.columnconfigure(1, weight=1)
 
         manual = self._section(parent, "Manual Color Correction")
         self._labeled_scale(manual, "Brightness", self.brightness_var, -0.5, 0.5, self._sync_color)

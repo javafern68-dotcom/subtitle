@@ -116,5 +116,12 @@ class CredentialTests(unittest.TestCase):
         self.assertEqual(load_api_key(), "")
 
 
+class UIRegressionTests(unittest.TestCase):
+    def test_color_presets_grid_isolated_from_packed_card(self) -> None:
+        source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
+        self.assertIn("ttk.Button(preset_grid", source)
+        self.assertNotIn("ttk.Button(presets, text=name", source)
+
+
 if __name__ == "__main__":
     unittest.main()
