@@ -21,7 +21,7 @@ from .transcription import transcribe_video
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা": "bn",
@@ -237,7 +237,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             generator,
-            text="AI Model: Whisper Medium • কাজের সময় Software বন্ধ করবেন না",
+            text="AI Model: Whisper Small Fast • লাইভ % দেখা যাবে • কাজের সময় Software বন্ধ করবেন না",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(0, 10))

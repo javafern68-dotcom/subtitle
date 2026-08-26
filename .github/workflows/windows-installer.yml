@@ -71,14 +71,14 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path "models" | Out-Null
-          $model = "models\ggml-medium-q5_0.bin"
+          $model = "models\ggml-small-q5_1.bin"
           curl.exe -L --fail --retry 3 --retry-delay 5 `
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin?download=true" `
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin?download=true" `
             -o $model
-          $expectedHash = "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f"
+          $expectedHash = "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb"
           $actualHash = (Get-FileHash $model -Algorithm SHA256).Hash.ToLower()
           if ($actualHash -ne $expectedHash) { throw "Offline model checksum mismatch: $actualHash" }
-          if ((Get-Item $model).Length -ne 539212467) { throw "Offline model size is incorrect" }
+          if ((Get-Item $model).Length -ne 190085487) { throw "Offline model size is incorrect" }
 
       - name: Run automated tests
         shell: pwsh
@@ -104,7 +104,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$app\models" | Out-Null
           New-Item -ItemType Directory -Force -Path "$app\licenses" | Out-Null
           Copy-Item "tools\whisper\*" "$app\tools\whisper" -Recurse -Force
-          Copy-Item "models\ggml-medium-q5_0.bin" "$app\models\ggml-medium-q5_0.bin"
+          Copy-Item "models\ggml-small-q5_1.bin" "$app\models\ggml-small-q5_1.bin"
           Copy-Item "THIRD_PARTY_NOTICES.txt" "$app\licenses\THIRD_PARTY_NOTICES.txt"
           Copy-Item "whisper-src\LICENSE" "$app\licenses\whisper.cpp-LICENSE.txt"
 
@@ -116,13 +116,13 @@ jobs:
           if (!(Test-Path "$app\Bangla Subtitle Studio.exe")) { throw "Application EXE missing" }
           if (!(Test-Path "$app\_internal\tools\ffmpeg.exe") -and !(Test-Path "$app\tools\ffmpeg.exe")) { throw "FFmpeg missing" }
           if (!(Test-Path "$app\tools\whisper\whisper-cli.exe")) { throw "Offline Whisper engine missing" }
-          if (!(Test-Path "$app\models\ggml-medium-q5_0.bin")) { throw "Offline model missing" }
+          if (!(Test-Path "$app\models\ggml-small-q5_1.bin")) { throw "Offline model missing" }
           & "$app\tools\whisper\whisper-cli.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "Offline Whisper engine self-test failed" }
-          $modelHash = (Get-FileHash "$app\models\ggml-medium-q5_0.bin" -Algorithm SHA256).Hash.ToLower()
-          if ($modelHash -ne "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f") { throw "Bundled model verification failed" }
+          $modelHash = (Get-FileHash "$app\models\ggml-small-q5_1.bin" -Algorithm SHA256).Hash.ToLower()
+          if ($modelHash -ne "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb") { throw "Bundled model verification failed" }
           & "$app\_internal\tools\ffmpeg.exe" -y -hide_banner -loglevel error -f lavfi -i "anullsrc=r=16000:cl=mono" -t 1 -c:a pcm_s16le "offline-smoke.wav"
-          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-medium-q5_0.bin" -f "offline-smoke.wav" -l bn -otxt -of "offline-smoke" -np
+          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-small-q5_1.bin" -f "offline-smoke.wav" -l bn -otxt -of "offline-smoke" -np
           if ($LASTEXITCODE -ne 0) { throw "Offline model transcription smoke test failed" }
           Get-ChildItem $app -Recurse | Measure-Object -Property Length -Sum
 
@@ -134,12 +134,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -147,30 +147,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v2.0.0"
+          $tag = "v2.1.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.exe" `
-              "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.exe" `
+              "installer\Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V2.0.0 Offline" `
-              --notes "Completely offline Bangla subtitle generation. No API key, Internet, subscription, or per-video cost. Includes the multilingual Whisper Medium Q5 model, whisper.cpp, Python runtime, and FFmpeg. Installs over V1 without requiring uninstall."
+              --title "Bangla Subtitle Studio V2.1.0 Offline Fast" `
+              --notes "Faster completely offline Bangla subtitle generation with live percentage progress. No API key, Internet, subscription, or per-video cost. Includes the multilingual Whisper Small Q5 model, whisper.cpp, Python runtime, and FFmpeg. Installs over V1 or V2 without requiring uninstall."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.exe" `
-              "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.exe" `
+              "installer\Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Offline-Setup-V2
+          name: Bangla-Subtitle-Studio-Offline-Fast-Setup-V2.1
           path: |
-            installer/Bangla_Subtitle_Studio_Offline_Setup_V2.exe
-            installer/Bangla_Subtitle_Studio_Offline_Setup_V2.sha256.txt
+            installer/Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.exe
+            installer/Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,8 +22,9 @@ class TranscriptionError(RuntimeError):
 
 ProgressCallback = Callable[[float, str], None]
 
-OFFLINE_MODEL_NAME = "ggml-medium-q5_0.bin"
+OFFLINE_MODEL_NAME = "ggml-small-q5_1.bin"
 OFFLINE_ENGINE_NAME = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
+_WHISPER_PROGRESS_RE = re.compile(rb"progress\s*=\s*(\d{1,3})%", re.IGNORECASE)
 
 
 def _application_roots() -> list[Path]:
@@ -86,6 +88,7 @@ def build_whisper_command(
         "84",
         "-sow",
         "-np",
+        "-pp",
     ]
     clean_prompt = " ".join(prompt.split()).strip()
     if clean_prompt:
@@ -99,6 +102,7 @@ def transcribe_audio_file(
     prompt: str = "",
     cancel_event: threading.Event | None = None,
     output_prefix: str | None = None,
+    progress: Callable[[float], None] | None = None,
 ) -> list[SubtitleSegment]:
     engine, model = offline_components()
     prefix = output_prefix or str(Path(audio_path).with_suffix("")) + "_subtitle"
@@ -121,7 +125,25 @@ def transcribe_audio_file(
                 stderr=subprocess.STDOUT,
                 startupinfo=_startupinfo(),
             )
+            log_position = 0
+            progress_tail = b""
+            last_percent = -1
             while process.poll() is None:
+                if progress:
+                    try:
+                        with log_path.open("rb") as progress_log:
+                            progress_log.seek(log_position)
+                            new_output = progress_log.read()
+                            log_position = progress_log.tell()
+                        progress_tail = (progress_tail + new_output)[-512:]
+                        matches = _WHISPER_PROGRESS_RE.findall(progress_tail)
+                        if matches:
+                            percent = max(0, min(100, int(matches[-1])))
+                            if percent > last_percent:
+                                last_percent = percent
+                                progress(percent / 100.0)
+                    except (OSError, ValueError):
+                        pass
                 if cancel_event and cancel_event.is_set():
                     process.terminate()
                     try:
@@ -131,6 +153,8 @@ def transcribe_audio_file(
                     raise TranscriptionError("সাবটাইটেল তৈরি বাতিল করা হয়েছে।")
                 time.sleep(0.15)
             return_code = int(process.returncode or 0)
+            if progress and return_code == 0:
+                progress(1.0)
     except OSError as exc:
         raise TranscriptionError(
             "Offline AI engine চালু করা যায়নি। Software আবার Install করুন।"
@@ -161,7 +185,7 @@ def transcribe_video(
     prompt: str = "",
     progress: ProgressCallback | None = None,
     cancel_event: threading.Event | None = None,
-    chunk_seconds: float = 900.0,
+    chunk_seconds: float = 600.0,
 ) -> list[SubtitleSegment]:
     # Resolve before extracting audio so a damaged installation fails immediately.
     offline_components()
@@ -190,12 +214,22 @@ def transcribe_video(
             if previous_context:
                 context_prompt = (context_prompt + "\nআগের অংশ: " + previous_context[-450:]).strip()
             output_prefix = str(Path(temp_dir) / f"subtitle_{index:03d}")
+
+            def part_progress(value: float) -> None:
+                overall = (index + 0.15 + max(0.0, min(1.0, value)) * 0.80) / total_parts
+                if progress:
+                    progress(
+                        overall,
+                        f"Offline বাংলা subtitle তৈরি হচ্ছে—{round(overall * 100)}% (অংশ {index + 1}/{total_parts})",
+                    )
+
             part_segments = transcribe_audio_file(
                 audio_path,
                 language,
                 context_prompt,
                 cancel_event,
                 output_prefix,
+                part_progress,
             )
             for item in part_segments:
                 combined.append(

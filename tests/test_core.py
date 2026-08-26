@@ -16,7 +16,12 @@ from bangla_subtitle_studio.subtitles import (
     write_ass,
     write_srt,
 )
-from bangla_subtitle_studio.transcription import build_whisper_command, transcribe_audio_file
+from bangla_subtitle_studio.transcription import (
+    OFFLINE_MODEL_NAME,
+    _WHISPER_PROGRESS_RE,
+    build_whisper_command,
+    transcribe_audio_file,
+)
 
 
 class SubtitleTests(unittest.TestCase):
@@ -91,7 +96,7 @@ class OfflineTranscriptionTests(unittest.TestCase):
     def test_whisper_command_uses_local_model_and_srt(self) -> None:
         command = build_whisper_command(
             "whisper-cli.exe",
-            "ggml-medium-q5_0.bin",
+            "ggml-small-q5_1.bin",
             "audio.wav",
             "subtitle",
             "bn",
@@ -99,11 +104,17 @@ class OfflineTranscriptionTests(unittest.TestCase):
             threads=4,
         )
         self.assertEqual(command[0], "whisper-cli.exe")
-        self.assertIn("ggml-medium-q5_0.bin", command)
+        self.assertEqual(OFFLINE_MODEL_NAME, "ggml-small-q5_1.bin")
+        self.assertIn("ggml-small-q5_1.bin", command)
         self.assertIn("-osrt", command)
+        self.assertIn("-pp", command)
         self.assertIn("bn", command)
         self.assertIn("--prompt", command)
         self.assertNotIn("api.openai.com", " ".join(command))
+
+    def test_live_progress_output_is_detected(self) -> None:
+        output = b"whisper_print_progress_callback: progress =  42%\r"
+        self.assertEqual(_WHISPER_PROGRESS_RE.findall(output), [b"42"])
 
     @mock.patch("bangla_subtitle_studio.transcription.subprocess.Popen")
     @mock.patch("bangla_subtitle_studio.transcription.offline_components")

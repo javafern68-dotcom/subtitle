@@ -1,4 +1,4 @@
-# Bangla Subtitle Studio V2 Offline
+# Bangla Subtitle Studio V2.1 Offline Fast
 
 বাংলা ভিডিও থেকে সময়সহ বাংলা সাবটাইটেল তৈরি, লেখা সংশোধন, স্টাইল পরিবর্তন, ভিডিওর ওপর লোগো বসানো, কালার ঠিক করা এবং নতুন MP4 Export করার Windows সফটওয়্যার।
 
@@ -8,16 +8,17 @@
 - OpenAI balance বা মাসিক subscription লাগবে না।
 - Internet ছাড়াই যত খুশি subtitle তৈরি করা যাবে।
 - ভিডিও ও অডিও আপনার কম্পিউটারের বাইরে পাঠানো হবে না।
-- Whisper Medium Offline বাংলা AI model installer-এর মধ্যেই থাকবে।
+- দ্রুত Whisper Small Offline বাংলা AI model installer-এর মধ্যেই থাকবে।
+- কাজ চলার সময় live শতাংশ দেখা যাবে।
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Offline_Setup_V2.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-V1 আগে install করা থাকলে সাধারণভাবে V2 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+V1 বা V2 আগে install করা থাকলে সাধারণভাবে V2.1 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Offline Subtitle তৈরির নিয়ম
 
@@ -28,7 +29,7 @@ V1 আগে install করা থাকলে সাধারণভাবে V2
 ৫. কাজ চলার সময় software বন্ধ করবেন না। Internet চালু রাখার প্রয়োজন নেই।  
 ৬. তৈরি হওয়া কোনো লাইনে double-click করে লেখা বা সময় ঠিক করুন।
 
-Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। তাই কম্পিউটার ও ভিডিওর দৈর্ঘ্য অনুযায়ী কিছু সময় লাগবে। এটি আটকে যাওয়া নয়। Laptop হলে charger সংযুক্ত রাখলে ভালো।
+Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। নতুন Fast model আগের V2-এর তুলনায় অনেক ছোট ও দ্রুত, এবং কাজ চলার সময় নিচে live শতাংশ দেখা যায়। কম্পিউটার ও ভিডিওর দৈর্ঘ্য অনুযায়ী কিছু সময় লাগবে। Laptop হলে charger সংযুক্ত রাখলে ভালো।
 
 ## Subtitle Style
 
