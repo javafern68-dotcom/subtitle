@@ -8,22 +8,20 @@ import threading
 import time
 import tkinter as tk
 import tkinter.font as tkfont
-import webbrowser
 from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox, ttk
 
 from PIL import Image, ImageEnhance, ImageTk
 
-from .credentials import CredentialStoreError, delete_api_key, load_api_key, save_api_key
 from .exporter import ExportError, export_project
 from .media import MediaError, _startupinfo, bundled_tool, extract_frame, probe_video
 from .models import ColorSettings, Project, SubtitleSegment
 from .subtitles import format_srt_time, parse_srt, parse_timecode, write_srt
-from .transcription import TranscriptionError, transcribe_video, validate_api_key
+from .transcription import transcribe_video
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "1.0.1"
+APP_VERSION = "2.0.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা": "bn",
@@ -33,9 +31,6 @@ LANGUAGES = {
     "Urdu": "ur",
     "Arabic": "ar",
 }
-OPENAI_API_KEYS_URL = "https://platform.openai.com/api-keys"
-
-
 class ScrollableTab(ttk.Frame):
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
@@ -126,27 +121,14 @@ class BanglaSubtitleStudio(tk.Tk):
         style.configure("TProgressbar", troughcolor="#0F1A2C", background="#2B7FFF")
 
     def _create_variables(self) -> None:
-        saved_key = ""
-        try:
-            saved_key = load_api_key()
-        except CredentialStoreError:
-            saved_key = ""
-        environment_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        active_key = environment_key or saved_key
-        self._key_saved = bool(saved_key)
         self.status_var = tk.StringVar(value="একটি ভিডিও নির্বাচন করে শুরু করুন।")
         self.progress_var = tk.DoubleVar(value=0.0)
         self.seek_var = tk.DoubleVar(value=0.0)
         self.time_var = tk.StringVar(value="00:00:00 / 00:00:00")
         self.video_name_var = tk.StringVar(value="কোনো ভিডিও নির্বাচন করা হয়নি")
-        self.api_key_var = tk.StringVar(value=active_key)
-        if environment_key:
-            key_status = "✓ OPENAI_API_KEY environment থেকে পাওয়া গেছে"
-        elif saved_key:
-            key_status = "✓ API key Windows-এ নিরাপদে Save আছে"
-        else:
-            key_status = "প্রথমবার OpenAI API key Setup করুন"
-        self.api_status_var = tk.StringVar(value=key_status)
+        self.offline_status_var = tk.StringVar(
+            value="✓ সম্পূর্ণ Offline • API Key ও Internet লাগবে না • প্রতি ভিডিও ০ টাকা"
+        )
         self.language_var = tk.StringVar(value="বাংলা")
         self.prompt_var = tk.StringVar(value="বাংলা ভাষা, বাংলাদেশের স্বাভাবিক বানান ও যতিচিহ্ন ব্যবহার করুন।")
         self.font_var = tk.StringVar(value="Nirmala UI")
@@ -176,7 +158,7 @@ class BanglaSubtitleStudio(tk.Tk):
         top = ttk.Frame(self, padding=(18, 12), style="TFrame")
         top.pack(fill="x")
         ttk.Label(top, text=APP_NAME, style="Title.TLabel").pack(side="left")
-        ttk.Label(top, text=f"  V{APP_VERSION} • বাংলা Auto Subtitle", style="Muted.TLabel").pack(side="left", pady=(7, 0))
+        ttk.Label(top, text=f"  V{APP_VERSION} • Offline বাংলা Auto Subtitle", style="Muted.TLabel").pack(side="left", pady=(7, 0))
         ttk.Button(top, text="Project খুলুন", command=self.open_project).pack(side="right", padx=4)
         ttk.Button(top, text="Project Save", command=self.save_project).pack(side="right", padx=4)
         ttk.Button(top, text="ভিডিও দিন", style="Accent.TButton", command=self.open_video).pack(side="right", padx=4)
@@ -244,20 +226,21 @@ class BanglaSubtitleStudio(tk.Tk):
         return card
 
     def _build_subtitle_tab(self) -> None:
-        generator = self._section(self.subtitle_tab, "ইন্টারনেটে বাংলা Subtitle তৈরি")
-        ttk.Label(generator, text="OpenAI API key", style="CardTitle.TLabel").pack(anchor="w")
-        key_row = ttk.Frame(generator, style="Card.TFrame")
-        key_row.pack(fill="x", pady=(4, 8))
-        self.key_entry = ttk.Entry(key_row, textvariable=self.api_key_var, show="•")
-        self.key_entry.pack(side="left", fill="x", expand=True)
-        ttk.Button(key_row, text="দেখুন", command=self._toggle_key).pack(side="left", padx=(5, 0))
-        setup_row = ttk.Frame(generator, style="Card.TFrame")
-        setup_row.pack(fill="x", pady=(0, 5))
-        ttk.Button(setup_row, text="① OpenAI Login / Key তৈরি", command=self.open_api_key_page).pack(side="left", fill="x", expand=True)
-        self.key_save_button = ttk.Button(setup_row, text="② Key পরীক্ষা ও Save", style="Accent.TButton", command=self.save_and_verify_api_key)
-        self.key_save_button.pack(side="left", fill="x", expand=True, padx=(6, 0))
-        ttk.Label(generator, textvariable=self.api_status_var, style="Muted.TLabel", wraplength=390).pack(anchor="w", fill="x", pady=(0, 5))
-        ttk.Button(generator, text="Save করা Key মুছুন", command=self.remove_saved_api_key).pack(anchor="e", pady=(0, 8))
+        generator = self._section(self.subtitle_tab, "খরচ ছাড়া Offline বাংলা Subtitle তৈরি")
+        ttk.Label(
+            generator,
+            textvariable=self.offline_status_var,
+            foreground="#65E6A3",
+            background="#1B2940",
+            font=("Nirmala UI", 10, "bold"),
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(0, 5))
+        ttk.Label(
+            generator,
+            text="AI Model: Whisper Medium • কাজের সময় Software বন্ধ করবেন না",
+            style="Muted.TLabel",
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(0, 10))
         lang_row = ttk.Frame(generator, style="Card.TFrame")
         lang_row.pack(fill="x", pady=(0, 8))
         ttk.Label(lang_row, text="ভিডিওর ভাষা", style="CardTitle.TLabel").pack(side="left")
@@ -266,7 +249,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ttk.Entry(generator, textvariable=self.prompt_var).pack(fill="x", pady=(4, 8))
         action_row = ttk.Frame(generator, style="Card.TFrame")
         action_row.pack(fill="x")
-        self.generate_button = ttk.Button(action_row, text="Generate Subtitle", style="Accent.TButton", command=self.generate_subtitles)
+        self.generate_button = ttk.Button(action_row, text="Offline Generate Subtitle", style="Accent.TButton", command=self.generate_subtitles)
         self.generate_button.pack(side="left", fill="x", expand=True)
         self.cancel_button = ttk.Button(action_row, text="বাতিল", style="Danger.TButton", command=self.cancel_task, state="disabled")
         self.cancel_button.pack(side="left", padx=(6, 0))
@@ -389,7 +372,7 @@ class BanglaSubtitleStudio(tk.Tk):
         project_card = self._section(parent, "Project")
         ttk.Button(project_card, text="Project Save", command=self.save_project).pack(fill="x", pady=3)
         ttk.Button(project_card, text="Project খুলুন", command=self.open_project).pack(fill="x", pady=3)
-        ttk.Label(project_card, text="Project file-এ API key কখনো save হয় না।", style="Muted.TLabel", wraplength=360).pack(anchor="w", pady=(8, 0))
+        ttk.Label(project_card, text="Project ও ভিডিও আপনার কম্পিউটারেই থাকে।", style="Muted.TLabel", wraplength=360).pack(anchor="w", pady=(8, 0))
 
     def _labeled_scale(
         self,
@@ -447,7 +430,7 @@ class BanglaSubtitleStudio(tk.Tk):
         self.seek_scale.configure(to=max(0.1, self.project.duration))
         self.video_name_var.set(f"{Path(path).name}  •  {self.project.width}×{self.project.height}")
         self._update_time_label()
-        self.status_var.set("ভিডিও প্রস্তুত। Generate Subtitle ক্লিক করুন।")
+        self.status_var.set("ভিডিও প্রস্তুত। Offline Generate Subtitle ক্লিক করুন।")
         self.request_preview(0.0)
 
     def request_preview(self, seconds: float) -> None:
@@ -726,10 +709,6 @@ class BanglaSubtitleStudio(tk.Tk):
         if not self.project.video_path:
             messagebox.showinfo(APP_NAME, "প্রথমে একটি ভিডিও দিন।", parent=self)
             return
-        if not self.api_key_var.get().strip():
-            messagebox.showinfo("API key প্রয়োজন", "Subtitle তৈরির জন্য OpenAI API key দিন।", parent=self)
-            self.key_entry.focus_set()
-            return
         if self.project.subtitles and not messagebox.askyesno("নতুন Subtitle", "বর্তমান subtitle বাদ দিয়ে নতুন করে তৈরি করবেন?", parent=self):
             return
         self._set_busy(True)
@@ -744,7 +723,6 @@ class BanglaSubtitleStudio(tk.Tk):
                 segments = transcribe_video(
                     self.project.video_path,
                     self.project.duration,
-                    self.api_key_var.get(),
                     language,
                     self.prompt_var.get(),
                     progress,
@@ -898,65 +876,6 @@ class BanglaSubtitleStudio(tk.Tk):
         if path:
             write_srt(path, self.project.subtitles)
             self.status_var.set("SRT file Save হয়েছে।")
-
-    def _toggle_key(self) -> None:
-        self.key_entry.configure(show="" if self.key_entry.cget("show") else "•")
-
-    def open_api_key_page(self) -> None:
-        webbrowser.open(OPENAI_API_KEYS_URL, new=2)
-        messagebox.showinfo(
-            "OpenAI API Setup",
-            "Browser-এ Gmail দিয়ে OpenAI login করুন।\n\n"
-            "তারপর Create new secret key চাপুন, key Copy করে সফটওয়্যারের ঘরে Paste করুন।\n\n"
-            "আপনার Gmail password সফটওয়্যার কখনো দেখবে না।",
-            parent=self,
-        )
-
-    def save_and_verify_api_key(self) -> None:
-        key = self.api_key_var.get().strip()
-        if not key:
-            messagebox.showinfo("API key প্রয়োজন", "প্রথমে API key Paste করুন।", parent=self)
-            self.key_entry.focus_set()
-            return
-        self.key_save_button.configure(state="disabled")
-        self.api_status_var.set("ইন্টারনেটের মাধ্যমে API key পরীক্ষা হচ্ছে…")
-
-        def worker() -> None:
-            try:
-                validate_api_key(key)
-                save_api_key(key)
-                self.after(0, lambda: self._finish_api_key_setup(None))
-            except Exception as exc:
-                self.after(0, lambda error=exc: self._finish_api_key_setup(error))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _finish_api_key_setup(self, error: Exception | None) -> None:
-        self.key_save_button.configure(state="normal")
-        if error:
-            self._key_saved = False
-            self.api_status_var.set(str(error))
-            messagebox.showerror("API key Save হয়নি", str(error), parent=self)
-            return
-        self._key_saved = True
-        self.api_status_var.set("✓ API key সঠিক এবং Windows-এ নিরাপদে Save হয়েছে")
-        messagebox.showinfo(
-            "Setup সম্পন্ন",
-            "API key নিরাপদে Save হয়েছে। পরেরবার সফটওয়্যার চালু করলে আর key দিতে হবে না।",
-            parent=self,
-        )
-
-    def remove_saved_api_key(self) -> None:
-        if not messagebox.askyesno("API key মুছুন", "Windows থেকে Save করা API key মুছবেন?", parent=self):
-            return
-        try:
-            delete_api_key()
-        except CredentialStoreError as exc:
-            messagebox.showerror(APP_NAME, str(exc), parent=self)
-            return
-        self._key_saved = False
-        self.api_key_var.set("")
-        self.api_status_var.set("Save করা API key মুছে দেওয়া হয়েছে")
 
     def _sync_style(self) -> None:
         if not hasattr(self, "preview_canvas"):

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
-import urllib.error
 
 from bangla_subtitle_studio.exporter import build_export_command, build_filter_graph
 from bangla_subtitle_studio.models import ColorSettings, LogoSettings, Project, SubtitleSegment, SubtitleStyle
@@ -18,8 +16,7 @@ from bangla_subtitle_studio.subtitles import (
     write_ass,
     write_srt,
 )
-from bangla_subtitle_studio.credentials import load_api_key
-from bangla_subtitle_studio.transcription import TranscriptionError, _multipart_body, validate_api_key
+from bangla_subtitle_studio.transcription import build_whisper_command, transcribe_audio_file
 
 
 class SubtitleTests(unittest.TestCase):
@@ -90,30 +87,43 @@ class ModelAndExportTests(unittest.TestCase):
         self.assertIn("libx264", command)
 
 
-class TranscriptionRequestTests(unittest.TestCase):
-    def test_multipart_contains_fields_and_file(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "audio.mp3"
-            path.write_bytes(b"audio-bytes")
-            body, boundary = _multipart_body([("model", "whisper-1")], "file", str(path))
-        self.assertIn(b"whisper-1", body)
-        self.assertIn(b"audio-bytes", body)
-        self.assertIn(boundary.encode(), body)
-
-    @mock.patch("bangla_subtitle_studio.transcription.urllib.request.urlopen")
-    def test_invalid_api_key_has_clear_message(self, mocked_urlopen: mock.Mock) -> None:
-        mocked_urlopen.side_effect = urllib.error.HTTPError(
-            "https://api.openai.com/v1/models", 401, "Unauthorized", {}, None
+class OfflineTranscriptionTests(unittest.TestCase):
+    def test_whisper_command_uses_local_model_and_srt(self) -> None:
+        command = build_whisper_command(
+            "whisper-cli.exe",
+            "ggml-medium-q5_0.bin",
+            "audio.wav",
+            "subtitle",
+            "bn",
+            "বাংলা বানান",
+            threads=4,
         )
-        with self.assertRaisesRegex(TranscriptionError, "API key সঠিক নয়"):
-            validate_api_key("invalid-key")
+        self.assertEqual(command[0], "whisper-cli.exe")
+        self.assertIn("ggml-medium-q5_0.bin", command)
+        self.assertIn("-osrt", command)
+        self.assertIn("bn", command)
+        self.assertIn("--prompt", command)
+        self.assertNotIn("api.openai.com", " ".join(command))
 
-
-class CredentialTests(unittest.TestCase):
-    def test_non_windows_load_does_not_write_plaintext_file(self) -> None:
-        if os.name == "nt":
-            self.skipTest("Non-Windows fallback test")
-        self.assertEqual(load_api_key(), "")
+    @mock.patch("bangla_subtitle_studio.transcription.subprocess.Popen")
+    @mock.patch("bangla_subtitle_studio.transcription.offline_components")
+    def test_offline_srt_result_is_parsed(
+        self, mocked_components: mock.Mock, mocked_popen: mock.Mock
+    ) -> None:
+        mocked_components.return_value = ("whisper-cli.exe", "model.bin")
+        process = mock.Mock()
+        process.poll.return_value = 0
+        process.returncode = 0
+        mocked_popen.return_value = process
+        with tempfile.TemporaryDirectory() as temp_dir:
+            prefix = str(Path(temp_dir) / "result")
+            Path(prefix + ".srt").write_text(
+                "1\n00:00:00,000 --> 00:00:02,000\nবাংলা পরীক্ষা\n",
+                encoding="utf-8",
+            )
+            result = transcribe_audio_file("audio.wav", output_prefix=prefix)
+        self.assertEqual(result[0].text, "বাংলা পরীক্ষা")
+        self.assertAlmostEqual(result[0].end, 2.0)
 
 
 class UIRegressionTests(unittest.TestCase):
@@ -121,6 +131,11 @@ class UIRegressionTests(unittest.TestCase):
         source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
         self.assertIn("ttk.Button(preset_grid", source)
         self.assertNotIn("ttk.Button(presets, text=name", source)
+
+    def test_offline_ui_has_no_api_key_controls(self) -> None:
+        source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
+        self.assertIn("সম্পূর্ণ Offline", source)
+        self.assertNotIn("api_key_var", source)
 
 
 if __name__ == "__main__":

@@ -1,17 +1,30 @@
-# Bangla Subtitle Studio V1
+# Bangla Subtitle Studio V2 Offline
 
-বাংলা ভিডিও থেকে স্বয়ংক্রিয় বাংলা সাবটাইটেল তৈরি, লেখা ও স্টাইল পরিবর্তন, লোগো বসানো, ভিডিওর রং ঠিক করা এবং নতুন MP4 export করার Windows desktop software।
+Windows desktop software for creating timed Bangla subtitles completely offline, editing subtitle text and style, placing a logo, adjusting video color, and exporting a new MP4.
 
-## Windows installer তৈরি
+## What changed in V2
 
-সবচেয়ে সহজ পদ্ধতি: ZIP Extract করে `UPLOAD_AND_BUILD.bat`-এ double-click করুন। Browser-এ GitHub login অনুমোদন করার পর software files upload, Windows build এবং Setup EXE download স্বয়ংক্রিয়ভাবে হবে।
+- No OpenAI API key, billing, account, or Internet connection is required.
+- Transcription runs locally with `whisper.cpp` and the multilingual Whisper Medium Q5 model.
+- The AI engine and model are included in the Windows installer.
+- Existing subtitle editing, SRT, logo, color, project, preview, and export features remain available.
 
-বিকল্পভাবে repository-র files `main` branch-এ upload/commit করলেও GitHub Actions Windows installer তৈরি করবে। Build শেষ হলে repository-র **Releases** অংশে `v1.0.0` release থেকে নিচের file-টি download করুন:
+The offline installer is larger because it contains the approximately 539 MB language model. Processing speed depends on the computer's CPU. The video and extracted audio remain on the computer.
 
-`Bangla_Subtitle_Studio_Setup_V1.exe`
+## Download
 
-Setup file-এ Python runtime এবং FFmpeg/FFprobe/FFplay bundled থাকে। ব্যবহারকারীকে এগুলো আলাদাভাবে install করতে হবে না। বাংলা subtitle তৈরির সময় শুধু Internet, একটি OpenAI API key এবং API balance প্রয়োজন।
+Download `Bangla_Subtitle_Studio_Offline_Setup_V2.exe` from the `v2.0.0` GitHub Release and install it normally. The existing V1 installation can be upgraded because the installer keeps the same application identity.
 
-সফটওয়্যারে **OpenAI Login / Key তৈরি** বাটন আছে। Browser-এ Gmail দিয়ে OpenAI login করে key একবার Paste ও Save করলে সেটি Windows Credential Manager-এ নিরাপদে থাকে; পরবর্তীবার আর key দিতে হয় না। Gmail password সফটওয়্যার সংগ্রহ করে না।
+## Developer build
 
-সম্পূর্ণ ব্যবহারবিধি: [README_BN.md](README_BN.md)
+The GitHub Actions workflow builds and bundles:
+
+- Python runtime and the application
+- FFmpeg, FFprobe, and FFplay
+- statically built `whisper.cpp` CLI
+- verified `ggml-medium-q5_0.bin` multilingual model
+- Inno Setup installer and SHA-256 checksum
+
+Complete Bangla usage instructions: [README_BN.md](README_BN.md)
+
+Third-party notices: [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)

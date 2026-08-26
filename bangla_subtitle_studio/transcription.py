@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import json
 import math
-import mimetypes
+import os
+import subprocess
+import sys
 import tempfile
 import threading
-import urllib.error
-import urllib.request
-import uuid
+import time
 from pathlib import Path
 from typing import Callable
 
-from .media import extract_audio_chunk
+from .media import _startupinfo, extract_audio_chunk
 from .models import SubtitleSegment
-from .subtitles import split_for_readability
+from .subtitles import parse_srt, split_for_readability
 
 
 class TranscriptionError(RuntimeError):
@@ -22,162 +21,196 @@ class TranscriptionError(RuntimeError):
 
 ProgressCallback = Callable[[float, str], None]
 
+OFFLINE_MODEL_NAME = "ggml-medium-q5_0.bin"
+OFFLINE_ENGINE_NAME = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 
-def _multipart_body(
-    fields: list[tuple[str, str]], file_field: str, file_path: str
-) -> tuple[bytes, str]:
-    boundary = "----BanglaSubtitleStudio" + uuid.uuid4().hex
-    marker = f"--{boundary}\r\n".encode()
-    chunks: list[bytes] = []
-    for name, value in fields:
-        chunks.extend(
-            [
-                marker,
-                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
-                value.encode("utf-8"),
-                b"\r\n",
-            ]
-        )
-    path = Path(file_path)
-    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    chunks.extend(
-        [
-            marker,
-            (
-                f'Content-Disposition: form-data; name="{file_field}"; filename="{path.name}"\r\n'
-                f"Content-Type: {content_type}\r\n\r\n"
-            ).encode("utf-8"),
-            path.read_bytes(),
-            b"\r\n",
-            f"--{boundary}--\r\n".encode(),
-        ]
+
+def _application_roots() -> list[Path]:
+    roots: list[Path] = []
+    if getattr(sys, "frozen", False):
+        roots.append(Path(sys.executable).resolve().parent)
+        meipass = str(getattr(sys, "_MEIPASS", "")).strip()
+        if meipass:
+            roots.append(Path(meipass))
+    roots.append(Path(__file__).resolve().parent.parent)
+    return roots
+
+
+def _resolve_offline_component(environment_name: str, relative_path: Path) -> str:
+    configured = os.environ.get(environment_name, "").strip()
+    if configured and Path(configured).is_file():
+        return configured
+    for root in _application_roots():
+        candidate = root / relative_path
+        if candidate.is_file():
+            return str(candidate)
+    raise TranscriptionError(
+        "Offline বাংলা AI model পাওয়া যায়নি। Bangla Subtitle Studio Offline installer আবার Install করুন।"
     )
-    return b"".join(chunks), boundary
 
 
-def validate_api_key(api_key: str, timeout: int = 30) -> None:
-    secret = api_key.strip()
-    if not secret:
-        raise TranscriptionError("OpenAI API key দিন।")
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/models",
-        method="GET",
-        headers={
-            "Authorization": f"Bearer {secret}",
-            "User-Agent": "BanglaSubtitleStudio/1.0",
-        },
+def offline_components() -> tuple[str, str]:
+    engine = _resolve_offline_component(
+        "BSS_WHISPER_CLI", Path("tools") / "whisper" / OFFLINE_ENGINE_NAME
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            if response.status < 200 or response.status >= 300:
-                raise TranscriptionError(f"OpenAI API পরীক্ষা ব্যর্থ হয়েছে ({response.status})।")
-    except urllib.error.HTTPError as exc:
-        if exc.code == 401:
-            raise TranscriptionError("API key সঠিক নয়। নতুন বা সঠিক OpenAI API key দিন।") from exc
-        if exc.code == 429:
-            raise TranscriptionError("API limit শেষ হয়েছে। OpenAI billing/usage পরীক্ষা করুন।") from exc
-        raise TranscriptionError(f"OpenAI API পরীক্ষা ব্যর্থ হয়েছে ({exc.code})।") from exc
-    except (urllib.error.URLError, TimeoutError) as exc:
-        raise TranscriptionError("ইন্টারনেট সংযোগ পাওয়া যায়নি অথবা OpenAI-তে সংযোগ হয়নি।") from exc
+    model = _resolve_offline_component(
+        "BSS_WHISPER_MODEL", Path("models") / OFFLINE_MODEL_NAME
+    )
+    return engine, model
+
+
+def build_whisper_command(
+    engine_path: str,
+    model_path: str,
+    audio_path: str,
+    output_prefix: str,
+    language: str = "bn",
+    prompt: str = "",
+    threads: int | None = None,
+) -> list[str]:
+    thread_count = threads or max(2, min(8, (os.cpu_count() or 4) - 1))
+    command = [
+        engine_path,
+        "-m",
+        model_path,
+        "-f",
+        audio_path,
+        "-l",
+        language or "auto",
+        "-t",
+        str(thread_count),
+        "-osrt",
+        "-of",
+        output_prefix,
+        "-ml",
+        "84",
+        "-sow",
+        "-np",
+    ]
+    clean_prompt = " ".join(prompt.split()).strip()
+    if clean_prompt:
+        command.extend(["--prompt", clean_prompt[:700], "--carry-initial-prompt"])
+    return command
 
 
 def transcribe_audio_file(
-    api_key: str,
     audio_path: str,
     language: str = "bn",
     prompt: str = "",
-    timeout: int = 900,
+    cancel_event: threading.Event | None = None,
+    output_prefix: str | None = None,
 ) -> list[SubtitleSegment]:
-    if not api_key.strip():
-        raise TranscriptionError("OpenAI API key দিন।")
-    fields: list[tuple[str, str]] = [
-        ("model", "whisper-1"),
-        ("response_format", "verbose_json"),
-        ("timestamp_granularities[]", "segment"),
-    ]
-    if language and language != "auto":
-        fields.append(("language", language))
-    if prompt.strip():
-        fields.append(("prompt", prompt.strip()[:900]))
-    body, boundary = _multipart_body(fields, "file", audio_path)
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/audio/transcriptions",
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {api_key.strip()}",
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "Content-Length": str(len(body)),
-            "User-Agent": "BanglaSubtitleStudio/1.0",
-        },
+    engine, model = offline_components()
+    prefix = output_prefix or str(Path(audio_path).with_suffix("")) + "_subtitle"
+    srt_path = Path(prefix + ".srt")
+    log_path = Path(prefix + ".log")
+    command = build_whisper_command(
+        engine,
+        model,
+        audio_path,
+        prefix,
+        language,
+        prompt,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        details = exc.read().decode("utf-8", "replace")
-        try:
-            message = json.loads(details).get("error", {}).get("message", details)
-        except json.JSONDecodeError:
-            message = details
-        if exc.code == 401:
-            message = "API key সঠিক নয়। নতুন বা সঠিক OpenAI API key দিন।"
-        elif exc.code == 429:
-            message = "API limit বা balance শেষ হয়েছে। OpenAI billing/usage পরীক্ষা করুন।"
-        raise TranscriptionError(message or f"API error: {exc.code}") from exc
-    except urllib.error.URLError as exc:
-        raise TranscriptionError("ইন্টারনেট সংযোগ পাওয়া যায়নি অথবা OpenAI-তে সংযোগ হয়নি।") from exc
-    except (TimeoutError, json.JSONDecodeError) as exc:
-        raise TranscriptionError("সাবটাইটেল উত্তর পাওয়া যায়নি। আবার চেষ্টা করুন।") from exc
 
-    segments: list[SubtitleSegment] = []
-    for item in payload.get("segments", []):
-        text = str(item.get("text", "")).strip()
-        if text:
-            segments.append(
-                SubtitleSegment(float(item.get("start", 0.0)), float(item.get("end", 0.0)), text).normalized()
+    try:
+        with log_path.open("wb") as log_file:
+            process = subprocess.Popen(
+                command,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                startupinfo=_startupinfo(),
             )
-    if not segments and str(payload.get("text", "")).strip():
-        duration = float(payload.get("duration", 5.0) or 5.0)
-        segments.append(SubtitleSegment(0.0, max(1.0, duration), str(payload["text"]).strip()))
-    return segments
+            while process.poll() is None:
+                if cancel_event and cancel_event.is_set():
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    raise TranscriptionError("সাবটাইটেল তৈরি বাতিল করা হয়েছে।")
+                time.sleep(0.15)
+            return_code = int(process.returncode or 0)
+    except OSError as exc:
+        raise TranscriptionError(
+            "Offline AI engine চালু করা যায়নি। Software আবার Install করুন।"
+        ) from exc
+
+    if return_code != 0:
+        details = ""
+        try:
+            details = log_path.read_text(encoding="utf-8", errors="replace").strip()[-1200:]
+        except OSError:
+            pass
+        raise TranscriptionError(
+            "Offline subtitle তৈরি হয়নি। কম্পিউটারে পর্যাপ্ত RAM আছে কি না পরীক্ষা করুন।"
+            + (f"\n\n{details}" if details else "")
+        )
+    if not srt_path.is_file():
+        raise TranscriptionError("Offline AI কোনো subtitle তৈরি করেনি। ভিডিওতে স্পষ্ট কথা আছে কি না দেখুন।")
+    try:
+        return parse_srt(srt_path)
+    except (OSError, ValueError) as exc:
+        raise TranscriptionError("তৈরি হওয়া Offline subtitle পড়া যায়নি।") from exc
 
 
 def transcribe_video(
     video_path: str,
     duration: float,
-    api_key: str,
     language: str = "bn",
     prompt: str = "",
     progress: ProgressCallback | None = None,
     cancel_event: threading.Event | None = None,
-    chunk_seconds: float = 540.0,
+    chunk_seconds: float = 900.0,
 ) -> list[SubtitleSegment]:
+    # Resolve before extracting audio so a damaged installation fails immediately.
+    offline_components()
     total_parts = max(1, math.ceil(max(duration, 0.1) / chunk_seconds))
     combined: list[SubtitleSegment] = []
     previous_context = ""
-    with tempfile.TemporaryDirectory(prefix="bangla_subtitle_") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="bangla_subtitle_offline_") as temp_dir:
         for index in range(total_parts):
             if cancel_event and cancel_event.is_set():
                 raise TranscriptionError("সাবটাইটেল তৈরি বাতিল করা হয়েছে।")
             start = index * chunk_seconds
             part_duration = min(chunk_seconds, max(0.1, duration - start))
             if progress:
-                progress(index / total_parts, f"অডিও প্রস্তুত হচ্ছে—অংশ {index + 1}/{total_parts}")
-            audio_path = str(Path(temp_dir) / f"audio_{index:03d}.mp3")
+                progress(
+                    index / total_parts,
+                    f"Offline অডিও প্রস্তুত হচ্ছে—অংশ {index + 1}/{total_parts}",
+                )
+            audio_path = str(Path(temp_dir) / f"audio_{index:03d}.wav")
             extract_audio_chunk(video_path, audio_path, start, part_duration)
             if progress:
-                progress((index + 0.25) / total_parts, f"বাংলা লেখা তৈরি হচ্ছে—অংশ {index + 1}/{total_parts}")
+                progress(
+                    (index + 0.15) / total_parts,
+                    f"কম্পিউটারে বাংলা লেখা তৈরি হচ্ছে—অংশ {index + 1}/{total_parts}। সময় লাগতে পারে…",
+                )
             context_prompt = prompt.strip()
             if previous_context:
                 context_prompt = (context_prompt + "\nআগের অংশ: " + previous_context[-450:]).strip()
-            part_segments = transcribe_audio_file(api_key, audio_path, language, context_prompt)
+            output_prefix = str(Path(temp_dir) / f"subtitle_{index:03d}")
+            part_segments = transcribe_audio_file(
+                audio_path,
+                language,
+                context_prompt,
+                cancel_event,
+                output_prefix,
+            )
             for item in part_segments:
                 combined.append(
-                    SubtitleSegment(item.start + start, item.end + start, item.text, item.secondary_text)
+                    SubtitleSegment(
+                        item.start + start,
+                        item.end + start,
+                        item.text,
+                        item.secondary_text,
+                    )
                 )
             if part_segments:
                 previous_context = " ".join(item.text for item in part_segments[-4:])
             if progress:
-                progress((index + 1) / total_parts, f"অংশ {index + 1}/{total_parts} সম্পন্ন")
+                progress(
+                    (index + 1) / total_parts,
+                    f"Offline অংশ {index + 1}/{total_parts} সম্পন্ন",
+                )
     return split_for_readability(combined, max_words=12, max_duration=6.0)

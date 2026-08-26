@@ -128,6 +128,10 @@ def extract_frame(path: str, seconds: float, width: int = 960, height: int = 540
 
 def extract_audio_chunk(video_path: str, output_path: str, start: float, duration: float) -> None:
     ffmpeg, _ = check_ffmpeg()
+    if Path(output_path).suffix.lower() == ".wav":
+        codec_args = ["-c:a", "pcm_s16le"]
+    else:
+        codec_args = ["-c:a", "libmp3lame", "-b:a", "64k"]
     command = [
         ffmpeg,
         "-y",
@@ -145,10 +149,7 @@ def extract_audio_chunk(video_path: str, output_path: str, start: float, duratio
         "1",
         "-ar",
         "16000",
-        "-c:a",
-        "libmp3lame",
-        "-b:a",
-        "64k",
+        *codec_args,
         output_path,
     ]
     completed = subprocess.run(
@@ -160,4 +161,3 @@ def extract_audio_chunk(video_path: str, output_path: str, start: float, duratio
     )
     if completed.returncode != 0:
         raise MediaError(completed.stderr.decode("utf-8", "replace").strip() or "অডিও তৈরি হয়নি।")
-

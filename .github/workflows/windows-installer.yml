@@ -1,4 +1,4 @@
-name: Build Windows Installer
+name: Build Windows Offline Installer
 
 on:
   workflow_dispatch:
@@ -9,8 +9,9 @@ on:
       - "v*"
 
 jobs:
-  build-windows-installer:
+  build-windows-offline-installer:
     runs-on: windows-latest
+    timeout-minutes: 120
     permissions:
       contents: write
 
@@ -44,6 +45,45 @@ jobs:
           Copy-Item "$bin\ffprobe.exe" "tools\ffprobe.exe"
           Copy-Item "$bin\ffplay.exe" "tools\ffplay.exe"
 
+      - name: Build offline Whisper engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git clone --depth 1 --branch "v1.9.3" https://github.com/ggml-org/whisper.cpp.git whisper-src
+          cmake -S whisper-src -B whisper-build -A x64 `
+            -DWHISPER_BUILD_TESTS=OFF `
+            -DWHISPER_BUILD_SERVER=OFF `
+            -DWHISPER_BUILD_EXAMPLES=ON `
+            -DBUILD_SHARED_LIBS=OFF `
+            -DGGML_STATIC=ON `
+            -DGGML_NATIVE=OFF `
+            -DGGML_OPENMP=OFF `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build whisper-build --config Release --target whisper-cli --parallel 2
+          $cli = Get-ChildItem "whisper-build" -Recurse -Filter "whisper-cli.exe" | Where-Object { $_.FullName -match "Release" } | Select-Object -First 1
+          if (!$cli) { throw "whisper-cli.exe was not built" }
+          New-Item -ItemType Directory -Force -Path "tools\whisper" | Out-Null
+          Copy-Item $cli.FullName "tools\whisper\whisper-cli.exe"
+          Get-ChildItem $cli.Directory.FullName -Filter "*.dll" | Copy-Item -Destination "tools\whisper" -ErrorAction SilentlyContinue
+
+      - name: Download verified Offline Bangla AI model
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path "models" | Out-Null
+          $model = "models\ggml-medium-q5_0.bin"
+          curl.exe -L --fail --retry 3 --retry-delay 5 `
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin?download=true" `
+            -o $model
+          $expectedHash = "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f"
+          $actualHash = (Get-FileHash $model -Algorithm SHA256).Hash.ToLower()
+          if ($actualHash -ne $expectedHash) { throw "Offline model checksum mismatch: $actualHash" }
+          if ((Get-Item $model).Length -ne 539212467) { throw "Offline model size is incorrect" }
+
+      - name: Run automated tests
+        shell: pwsh
+        run: python -m unittest discover -s tests -v
+
       - name: Build standalone Windows application
         shell: pwsh
         run: |
@@ -55,6 +95,19 @@ jobs:
             --add-binary "tools\ffplay.exe;tools" `
             run_app.py
 
+      - name: Bundle Offline engine and model
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $app = "dist\Bangla Subtitle Studio"
+          New-Item -ItemType Directory -Force -Path "$app\tools\whisper" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$app\models" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$app\licenses" | Out-Null
+          Copy-Item "tools\whisper\*" "$app\tools\whisper" -Recurse -Force
+          Copy-Item "models\ggml-medium-q5_0.bin" "$app\models\ggml-medium-q5_0.bin"
+          Copy-Item "THIRD_PARTY_NOTICES.txt" "$app\licenses\THIRD_PARTY_NOTICES.txt"
+          Copy-Item "whisper-src\LICENSE" "$app\licenses\whisper.cpp-LICENSE.txt"
+
       - name: Verify bundled application
         shell: pwsh
         run: |
@@ -62,6 +115,15 @@ jobs:
           $app = "dist\Bangla Subtitle Studio"
           if (!(Test-Path "$app\Bangla Subtitle Studio.exe")) { throw "Application EXE missing" }
           if (!(Test-Path "$app\_internal\tools\ffmpeg.exe") -and !(Test-Path "$app\tools\ffmpeg.exe")) { throw "FFmpeg missing" }
+          if (!(Test-Path "$app\tools\whisper\whisper-cli.exe")) { throw "Offline Whisper engine missing" }
+          if (!(Test-Path "$app\models\ggml-medium-q5_0.bin")) { throw "Offline model missing" }
+          & "$app\tools\whisper\whisper-cli.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "Offline Whisper engine self-test failed" }
+          $modelHash = (Get-FileHash "$app\models\ggml-medium-q5_0.bin" -Algorithm SHA256).Hash.ToLower()
+          if ($modelHash -ne "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f") { throw "Bundled model verification failed" }
+          & "$app\_internal\tools\ffmpeg.exe" -y -hide_banner -loglevel error -f lavfi -i "anullsrc=r=16000:cl=mono" -t 1 -c:a pcm_s16le "offline-smoke.wav"
+          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-medium-q5_0.bin" -f "offline-smoke.wav" -l bn -otxt -of "offline-smoke" -np
+          if ($LASTEXITCODE -ne 0) { throw "Offline model transcription smoke test failed" }
           Get-ChildItem $app -Recurse | Measure-Object -Property Length -Sum
 
       - name: Install Inno Setup
@@ -72,43 +134,43 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Setup_V1.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Setup_V1.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Setup_V1.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.sha256.txt" -Encoding ascii
 
-      - name: Publish installer in GitHub Releases
+      - name: Publish Offline installer in GitHub Releases
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v1.0.1"
+          $tag = "v2.0.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Setup_V1.exe" `
-              "installer\Bangla_Subtitle_Studio_Setup_V1.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.exe" `
+              "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V1.0.1" `
-              --notes "Startup fix for the Color tab. Complete Windows installer with bundled Python runtime and FFmpeg. This installer upgrades the existing installation."
+              --title "Bangla Subtitle Studio V2.0.0 Offline" `
+              --notes "Completely offline Bangla subtitle generation. No API key, Internet, subscription, or per-video cost. Includes the multilingual Whisper Medium Q5 model, whisper.cpp, Python runtime, and FFmpeg. Installs over V1 without requiring uninstall."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Setup_V1.exe" `
-              "installer\Bangla_Subtitle_Studio_Setup_V1.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.exe" `
+              "installer\Bangla_Subtitle_Studio_Offline_Setup_V2.sha256.txt" `
               --clobber
           }
 
-      - name: Upload installer
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Setup-V1
+          name: Bangla-Subtitle-Studio-Offline-Setup-V2
           path: |
-            installer/Bangla_Subtitle_Studio_Setup_V1.exe
-            installer/Bangla_Subtitle_Studio_Setup_V1.sha256.txt
+            installer/Bangla_Subtitle_Studio_Offline_Setup_V2.exe
+            installer/Bangla_Subtitle_Studio_Offline_Setup_V2.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

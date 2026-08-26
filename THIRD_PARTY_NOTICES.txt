@@ -1,0 +1,19 @@
+Bangla Subtitle Studio V2 Offline includes third-party software and model files.
+
+whisper.cpp
+Copyright (c) 2023-2026 The ggml authors
+Source: https://github.com/ggml-org/whisper.cpp
+License: MIT
+
+OpenAI Whisper model
+Copyright (c) 2022 OpenAI
+Source: https://github.com/openai/whisper
+Converted model source: https://huggingface.co/ggerganov/whisper.cpp
+License: MIT
+
+FFmpeg
+Source: https://ffmpeg.org/
+The bundled build is redistributed under the license terms supplied by its distributor.
+
+Pillow and other Python packages
+Their license files and package metadata are included by the standalone application builder where applicable.
