@@ -1,0 +1,114 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+    tags:
+      - "v*"
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Get source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt
+          python build_icon.py
+
+      - name: Download and bundle FFmpeg
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive "ffmpeg.zip" -DestinationPath "ffmpeg-package"
+          $ffmpegRoot = (Get-ChildItem "ffmpeg-package" -Directory | Select-Object -First 1).FullName
+          $bin = Join-Path $ffmpegRoot "bin"
+          New-Item -ItemType Directory -Force -Path "tools" | Out-Null
+          Copy-Item "$bin\ffmpeg.exe" "tools\ffmpeg.exe"
+          Copy-Item "$bin\ffprobe.exe" "tools\ffprobe.exe"
+          Copy-Item "$bin\ffplay.exe" "tools\ffplay.exe"
+
+      - name: Build standalone Windows application
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --windowed --onedir `
+            --name "Bangla Subtitle Studio" `
+            --icon "app.ico" `
+            --add-binary "tools\ffmpeg.exe;tools" `
+            --add-binary "tools\ffprobe.exe;tools" `
+            --add-binary "tools\ffplay.exe;tools" `
+            run_app.py
+
+      - name: Verify bundled application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $app = "dist\Bangla Subtitle Studio"
+          if (!(Test-Path "$app\Bangla Subtitle Studio.exe")) { throw "Application EXE missing" }
+          if (!(Test-Path "$app\_internal\tools\ffmpeg.exe") -and !(Test-Path "$app\tools\ffmpeg.exe")) { throw "FFmpeg missing" }
+          Get-ChildItem $app -Recurse | Measure-Object -Property Length -Sum
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Setup EXE
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Setup_V1.exe")) { throw "Setup EXE missing" }
+
+      - name: Create checksum
+        shell: pwsh
+        run: |
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Setup_V1.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Setup_V1.sha256.txt" -Encoding ascii
+
+      - name: Publish installer in GitHub Releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "v1.0.0"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag `
+              "installer\Bangla_Subtitle_Studio_Setup_V1.exe" `
+              "installer\Bangla_Subtitle_Studio_Setup_V1.sha256.txt" `
+              --target "${{ github.sha }}" `
+              --title "Bangla Subtitle Studio V1" `
+              --notes "Complete Windows installer with bundled Python runtime and FFmpeg. Install it once, then launch Bangla Subtitle Studio from the desktop or Start menu."
+          }
+          else {
+            gh release upload $tag `
+              "installer\Bangla_Subtitle_Studio_Setup_V1.exe" `
+              "installer\Bangla_Subtitle_Studio_Setup_V1.sha256.txt" `
+              --clobber
+          }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bangla-Subtitle-Studio-Setup-V1
+          path: |
+            installer/Bangla_Subtitle_Studio_Setup_V1.exe
+            installer/Bangla_Subtitle_Studio_Setup_V1.sha256.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
