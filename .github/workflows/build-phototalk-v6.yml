@@ -22,13 +22,20 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Expand PhotoTalk V6 source bundle
+      - name: Reassemble and verify PhotoTalk V6 source
         shell: pwsh
         run: |
-          $b64 = Get-Content phototalk_v6/source_bundle.b64 -Raw
+          $parts = Get-ChildItem phototalk_v6/chunks/source_*.b64 | Sort-Object Name
+          if ($parts.Count -ne 6) { throw "Expected 6 source chunks, found $($parts.Count)" }
+          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          if ($b64.Length -ne 20900) { throw "Source Base64 length mismatch: $($b64.Length)" }
           $zip = Join-Path $env:TEMP 'ptv6_source.zip'
           [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Source ZIP SHA256: $hash"
+          if ($hash -ne '7be68c08c75c3ac2a1857bc4358e7624ad833697d537a7a0fc93f98947981f70') { throw 'Source ZIP SHA256 mismatch' }
           Expand-Archive -LiteralPath $zip -DestinationPath . -Force
+          if (-not (Test-Path phototalk_v6/build_v6.py)) { throw 'Build source extraction failed' }
 
       - name: Install Inno Setup compiler on build machine
         shell: pwsh
