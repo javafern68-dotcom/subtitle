@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -52,7 +52,22 @@ jobs:
           Write-Host "Final installer size: $([math]::Round($f.Length / 1MB, 1)) MB"
           if ($f.Length -lt 188743680) { throw 'Installer is unexpectedly small' }
 
-      - name: Upload FULL OFFLINE installer
+      - name: Publish single EXE to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'phototalk-v6-full-offline'
+          $exe = 'dist/PhotoTalk_Real_V6_FULL_OFFLINE_Setup.exe'
+          $sha = 'dist/PhotoTalk_Real_V6_FULL_OFFLINE_SHA256.txt'
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $exe $sha --repo $env:GITHUB_REPOSITORY --clobber
+          } else {
+            gh release create $tag $exe $sha --repo $env:GITHUB_REPOSITORY --title 'PhotoTalk Real V6 FULL OFFLINE' --notes 'Single self-contained Windows installer. No joining or extra runtime download required after download.'
+          }
+
+      - name: Upload backup artifact
         uses: actions/upload-artifact@v4
         with:
           name: PhotoTalk-Real-V6-FULL-OFFLINE
