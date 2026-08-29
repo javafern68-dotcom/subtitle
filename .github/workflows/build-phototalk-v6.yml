@@ -1,0 +1,56 @@
+name: Build PhotoTalk V6 Full Offline
+
+on:
+  push:
+    branches:
+      - phototalk-v6-offline-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Expand PhotoTalk V6 source bundle
+        shell: pwsh
+        run: |
+          $b64 = Get-Content phototalk_v6/source_bundle.b64 -Raw
+          $zip = Join-Path $env:TEMP 'ptv6_source.zip'
+          [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
+          Expand-Archive -LiteralPath $zip -DestinationPath . -Force
+
+      - name: Install Inno Setup compiler on build machine
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build bundle and run Windows smoke tests
+        shell: pwsh
+        run: python phototalk_v6/build_v6.py
+
+      - name: Verify final installer size
+        shell: pwsh
+        run: |
+          $f = Get-Item dist/PhotoTalk_Real_V6_FULL_OFFLINE_Setup.exe
+          Write-Host "Final installer size: $([math]::Round($f.Length / 1MB, 1)) MB"
+          if ($f.Length -lt 188743680) { throw 'Installer is unexpectedly small' }
+
+      - name: Upload FULL OFFLINE installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoTalk-Real-V6-FULL-OFFLINE
+          path: |
+            dist/PhotoTalk_Real_V6_FULL_OFFLINE_Setup.exe
+            dist/PhotoTalk_Real_V6_FULL_OFFLINE_SHA256.txt
+          compression-level: 0
+          retention-days: 7
