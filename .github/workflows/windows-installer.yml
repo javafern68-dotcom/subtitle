@@ -71,14 +71,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path "models" | Out-Null
-          $model = "models\ggml-large-v3-turbo-q5_0.bin"
+          $model = "models\ggml-bengali-medium-q4_0.bin"
           curl.exe -L --fail --retry 3 --retry-delay 5 `
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin?download=true" `
+            "https://huggingface.co/SayedShaun/bengali-whisper-medium-ggml/resolve/main/ggml-model-q4_0.bin?download=true" `
             -o $model
-          $expectedHash = "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"
+          $expectedHash = "6ccc65d58a7915f8d9a6d3d45ec2d6d10c784bd2c7b40a5a6b053712040b51d1"
           $actualHash = (Get-FileHash $model -Algorithm SHA256).Hash.ToLower()
           if ($actualHash -ne $expectedHash) { throw "Offline model checksum mismatch: $actualHash" }
-          if ((Get-Item $model).Length -ne 574041195) { throw "Offline model size is incorrect" }
 
       - name: Run automated tests
         shell: pwsh
@@ -104,9 +103,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$app\models" | Out-Null
           New-Item -ItemType Directory -Force -Path "$app\licenses" | Out-Null
           Copy-Item "tools\whisper\*" "$app\tools\whisper" -Recurse -Force
-          Copy-Item "models\ggml-large-v3-turbo-q5_0.bin" "$app\models\ggml-large-v3-turbo-q5_0.bin"
+          Copy-Item "models\ggml-bengali-medium-q4_0.bin" "$app\models\ggml-bengali-medium-q4_0.bin"
           Copy-Item "THIRD_PARTY_NOTICES.txt" "$app\licenses\THIRD_PARTY_NOTICES.txt"
           Copy-Item "whisper-src\LICENSE" "$app\licenses\whisper.cpp-LICENSE.txt"
+          Invoke-WebRequest "https://www.apache.org/licenses/LICENSE-2.0.txt" -OutFile "$app\licenses\Bengali-model-Apache-2.0-LICENSE.txt"
 
       - name: Verify bundled application
         shell: pwsh
@@ -116,16 +116,16 @@ jobs:
           if (!(Test-Path "$app\Bangla Subtitle Studio.exe")) { throw "Application EXE missing" }
           if (!(Test-Path "$app\_internal\tools\ffmpeg.exe") -and !(Test-Path "$app\tools\ffmpeg.exe")) { throw "FFmpeg missing" }
           if (!(Test-Path "$app\tools\whisper\whisper-cli.exe")) { throw "Offline Whisper engine missing" }
-          if (!(Test-Path "$app\models\ggml-large-v3-turbo-q5_0.bin")) { throw "Offline model missing" }
+          if (!(Test-Path "$app\models\ggml-bengali-medium-q4_0.bin")) { throw "Offline model missing" }
           & "$app\tools\whisper\whisper-cli.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "Offline Whisper engine self-test failed" }
-          $modelHash = (Get-FileHash "$app\models\ggml-large-v3-turbo-q5_0.bin" -Algorithm SHA256).Hash.ToLower()
-          if ($modelHash -ne "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2") { throw "Bundled model verification failed" }
+          $modelHash = (Get-FileHash "$app\models\ggml-bengali-medium-q4_0.bin" -Algorithm SHA256).Hash.ToLower()
+          if ($modelHash -ne "6ccc65d58a7915f8d9a6d3d45ec2d6d10c784bd2c7b40a5a6b053712040b51d1") { throw "Bundled model verification failed" }
           curl.exe -L --fail --retry 3 --retry-delay 5 `
             "https://huggingface.co/bangla-speech-processing/BanglaASR/resolve/main/mp3/common_voice_bn_31515636.mp3?download=true" `
             -o "bangla-smoke.mp3"
           & "$app\_internal\tools\ffmpeg.exe" -y -hide_banner -loglevel error -i "bangla-smoke.mp3" -ar 16000 -ac 1 -c:a pcm_s16le "bangla-smoke.wav"
-          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-large-v3-turbo-q5_0.bin" -f "bangla-smoke.wav" -l bn -otxt -of "bangla-smoke" -np --prompt "আমি বাংলা ভাষায় কথা বলছি। সব কথা বাংলা অক্ষরে লেখা হচ্ছে।"
+          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-bengali-medium-q4_0.bin" -f "bangla-smoke.wav" -l bn -otxt -of "bangla-smoke" -np --prompt "আমি বাংলা ভাষায় কথা বলছি। সব কথা বাংলা অক্ষরে লেখা হচ্ছে।"
           if ($LASTEXITCODE -ne 0) { throw "Offline Bengali transcription smoke test failed" }
           $banglaText = Get-Content "bangla-smoke.txt" -Raw -Encoding UTF8
           if ($banglaText -notmatch '[\u0980-\u09FF]') { throw "The bundled model did not create Bengali-script text: $banglaText" }
@@ -161,7 +161,7 @@ jobs:
               "installer\Bangla_Subtitle_Studio_Bangla_Setup_V2.2.sha256.txt" `
               --target "${{ github.sha }}" `
               --title "Bangla Subtitle Studio V2.2.0 Bangla Only" `
-              --notes "Bengali-script-only offline subtitle generation with a higher-accuracy Whisper Large V3 Turbo Q5 model and live percentage progress. The build is verified using real Bengali speech. No API key, Internet, subscription, or per-video cost. Installs over earlier versions without uninstalling."
+              --notes "Bengali-script-only offline subtitle generation with a dedicated Bengali fine-tuned Whisper Medium Q4 model and live percentage progress. The build is verified using real Bengali speech. No API key, Internet, subscription, or per-video cost. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `

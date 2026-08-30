@@ -22,7 +22,7 @@ class TranscriptionError(RuntimeError):
 
 ProgressCallback = Callable[[float, str], None]
 
-OFFLINE_MODEL_NAME = "ggml-large-v3-turbo-q5_0.bin"
+OFFLINE_MODEL_NAME = "ggml-bengali-medium-q4_0.bin"
 OFFLINE_ENGINE_NAME = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 _WHISPER_PROGRESS_RE = re.compile(rb"progress\s*=\s*(\d{1,3})%", re.IGNORECASE)
 BANGLA_SCRIPT_PROMPT = (

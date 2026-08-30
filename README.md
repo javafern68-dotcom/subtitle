@@ -5,13 +5,13 @@ Windows desktop software for creating timed Bangla subtitles completely offline,
 ## What changed in V2
 
 - No OpenAI API key, billing, account, or Internet connection is required.
-- Transcription runs locally with `whisper.cpp` and the higher-accuracy multilingual Whisper Large V3 Turbo Q5 model.
+- Transcription runs locally with `whisper.cpp` and a dedicated Bengali fine-tuned Whisper Medium Q4 model.
 - Bengali (`bn`) transcription is permanently selected; auto-detection and translation are disabled.
 - Live percentage progress is shown while the subtitle is generated.
 - The AI engine and model are included in the Windows installer.
 - Existing subtitle editing, SRT, logo, color, project, preview, and export features remain available.
 
-The offline installer contains the approximately 574 MB language model. Processing speed depends on the computer's CPU. The video and extracted audio remain on the computer.
+The offline installer contains the approximately 445 MB Bengali language model. Processing speed depends on the computer's CPU. The video and extracted audio remain on the computer.
 
 ## Download
 
@@ -24,7 +24,7 @@ The GitHub Actions workflow builds and bundles:
 - Python runtime and the application
 - FFmpeg, FFprobe, and FFplay
 - statically built `whisper.cpp` CLI
-- verified `ggml-large-v3-turbo-q5_0.bin` multilingual model
+- verified `ggml-bengali-medium-q4_0.bin` Bengali fine-tuned model
 - real Bengali speech test that must produce Bengali Unicode text
 - Inno Setup installer and SHA-256 checksum
 

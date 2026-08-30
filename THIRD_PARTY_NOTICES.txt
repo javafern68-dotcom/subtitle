@@ -5,11 +5,11 @@ Copyright (c) 2023-2026 The ggml authors
 Source: https://github.com/ggml-org/whisper.cpp
 License: MIT
 
-OpenAI Whisper model
-Copyright (c) 2022 OpenAI
-Source: https://github.com/openai/whisper
-Converted model source: https://huggingface.co/ggerganov/whisper.cpp
-License: MIT
+Bengali fine-tuned Whisper model
+Converted model: https://huggingface.co/SayedShaun/bengali-whisper-medium-ggml
+Fine-tuned source: https://huggingface.co/SayedShaun/bengali-whisper-medium
+Based on OpenAI Whisper: https://github.com/openai/whisper
+License: Apache-2.0 (a copy is bundled with the application)
 
 FFmpeg
 Source: https://ffmpeg.org/
