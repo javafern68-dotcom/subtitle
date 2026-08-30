@@ -1,4 +1,4 @@
-# Bangla Subtitle Studio V2.2 — শুধু বাংলা অক্ষর
+# Bangla Subtitle Studio V2.3 — দ্রুত বাংলা Subtitle
 
 বাংলা ভিডিও থেকে সময়সহ বাংলা সাবটাইটেল তৈরি, লেখা সংশোধন, স্টাইল পরিবর্তন, ভিডিওর ওপর লোগো বসানো, কালার ঠিক করা এবং নতুন MP4 Export করার Windows সফটওয়্যার।
 
@@ -8,18 +8,18 @@
 - OpenAI balance বা মাসিক subscription লাগবে না।
 - Internet ছাড়াই যত খুশি subtitle তৈরি করা যাবে।
 - ভিডিও ও অডিও আপনার কম্পিউটারের বাইরে পাঠানো হবে না।
-- বাংলা কথার জন্য আলাদাভাবে প্রশিক্ষিত Whisper Bengali Medium Q4 model installer-এর মধ্যেই থাকবে।
+- বাংলা কথার জন্য আলাদাভাবে প্রশিক্ষিত দ্রুত Whisper Bengali Small Q5 model installer-এর মধ্যেই থাকবে।
 - বাংলা (`bn`) mode সবসময় চালু থাকবে; অন্য ভাষা auto-detect বা English translation হবে না।
-- কাজ চলার সময় live শতাংশ দেখা যাবে।
+- কাজ চলার সময় live শতাংশ ও কত সেকেন্ড চলছে তা দেখা যাবে।
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Bangla_Setup_V2.2.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V2.2 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V2.3 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Offline Subtitle তৈরির নিয়ম
 
@@ -30,7 +30,7 @@
 ৫. কাজ চলার সময় software বন্ধ করবেন না। Internet চালু রাখার প্রয়োজন নেই।  
 ৬. তৈরি হওয়া কোনো লাইনে double-click করে লেখা বা সময় ঠিক করুন।
 
-Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। নতুন Bengali model বাংলা অক্ষর ও বাংলা কথার নির্ভুলতাকে অগ্রাধিকার দেয় এবং কাজ চলার সময় নিচে live শতাংশ দেখা যায়। কম্পিউটার ও ভিডিওর দৈর্ঘ্য অনুযায়ী কিছু সময় লাগবে। Laptop হলে charger সংযুক্ত রাখলে ভালো।
+Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V2.3-এর Bengali Small model আগের V2.2 Medium model-এর তুলনায় অনেক ছোট ও দ্রুত। কাজ চলার সময় নিচে live শতাংশের সঙ্গে সেকেন্ডও বদলাবে—সেকেন্ড বাড়তে থাকলে সফটওয়্যার কাজ করছে। কম্পিউটার ও ভিডিওর দৈর্ঘ্য অনুযায়ী কিছু সময় লাগবে। Laptop হলে charger সংযুক্ত রাখলে ভালো।
 
 ## Subtitle Style
 
@@ -73,11 +73,11 @@ Manual controls: Brightness, Contrast, Saturation, Temperature ও Tint।
 ## সাধারণ সমস্যা
 
 - `Offline বাংলা AI model পাওয়া যায়নি`: V2 Offline installer আবার install করুন।
-- কাজ ধীরে হচ্ছে: অন্য ভারী software বন্ধ করুন এবং কাজ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।
+- কাজ ধীরে হচ্ছে: নিচের “কাজ চলছে” সময় বাড়ছে কি না দেখুন, অন্য ভারী software বন্ধ করুন এবং কাজ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।
 - `পর্যাপ্ত RAM` বার্তা: অন্য software বন্ধ করে আবার চেষ্টা করুন।
 - বাংলা অক্ষর box দেখায়: Windows Settings থেকে Bengali language/font support install করুন।
 - কথা ভুল লিখেছে: background music কমানো বা পরিষ্কার audio ব্যবহার করা ভালো; ভুল line-এ double-click করে সংশোধন করুন।
 
 ## গোপনীয়তা ও খরচ
 
-Subtitle আপনার কম্পিউটারেই `whisper.cpp` ও multilingual Whisper model দিয়ে তৈরি হয়। কোনো API account, API key, billing অথবা recurring fee নেই। Subtitle, logo, color correction ও final video Export সবই স্থানীয়ভাবে সম্পন্ন হয়।
+Subtitle আপনার কম্পিউটারেই `whisper.cpp` ও Bengali fine-tuned Whisper model দিয়ে তৈরি হয়। কোনো API account, API key, billing অথবা recurring fee নেই। Subtitle, logo, color correction ও final video Export সবই স্থানীয়ভাবে সম্পন্ন হয়।

@@ -96,7 +96,7 @@ class OfflineTranscriptionTests(unittest.TestCase):
     def test_whisper_command_uses_local_model_and_srt(self) -> None:
         command = build_whisper_command(
             "whisper-cli.exe",
-            "ggml-bengali-medium-q4_0.bin",
+            "ggml-banglaasr-small-q5_0.bin",
             "audio.wav",
             "subtitle",
             "en",
@@ -104,8 +104,8 @@ class OfflineTranscriptionTests(unittest.TestCase):
             threads=4,
         )
         self.assertEqual(command[0], "whisper-cli.exe")
-        self.assertEqual(OFFLINE_MODEL_NAME, "ggml-bengali-medium-q4_0.bin")
-        self.assertIn("ggml-bengali-medium-q4_0.bin", command)
+        self.assertEqual(OFFLINE_MODEL_NAME, "ggml-banglaasr-small-q5_0.bin")
+        self.assertIn("ggml-banglaasr-small-q5_0.bin", command)
         self.assertIn("-osrt", command)
         self.assertIn("-pp", command)
         self.assertEqual(command[command.index("-l") + 1], "bn")

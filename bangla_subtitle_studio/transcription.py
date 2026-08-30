@@ -21,8 +21,9 @@ class TranscriptionError(RuntimeError):
 
 
 ProgressCallback = Callable[[float, str], None]
+AudioProgressCallback = Callable[[float, float], None]
 
-OFFLINE_MODEL_NAME = "ggml-bengali-medium-q4_0.bin"
+OFFLINE_MODEL_NAME = "ggml-banglaasr-small-q5_0.bin"
 OFFLINE_ENGINE_NAME = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 _WHISPER_PROGRESS_RE = re.compile(rb"progress\s*=\s*(\d{1,3})%", re.IGNORECASE)
 BANGLA_SCRIPT_PROMPT = (
@@ -74,7 +75,9 @@ def build_whisper_command(
     prompt: str = "",
     threads: int | None = None,
 ) -> list[str]:
-    thread_count = threads or max(2, min(8, (os.cpu_count() or 4) - 1))
+    # Use all available cores on small computers, while keeping a sensible cap
+    # for laptops with many logical cores.
+    thread_count = threads or max(2, min(8, os.cpu_count() or 4))
     command = [
         engine_path,
         "-m",
@@ -106,7 +109,7 @@ def transcribe_audio_file(
     prompt: str = "",
     cancel_event: threading.Event | None = None,
     output_prefix: str | None = None,
-    progress: Callable[[float], None] | None = None,
+    progress: AudioProgressCallback | None = None,
 ) -> list[SubtitleSegment]:
     engine, model = offline_components()
     prefix = output_prefix or str(Path(audio_path).with_suffix("")) + "_subtitle"
@@ -132,7 +135,10 @@ def transcribe_audio_file(
             log_position = 0
             progress_tail = b""
             last_percent = -1
+            started_at = time.monotonic()
+            last_callback_at = started_at
             while process.poll() is None:
+                now = time.monotonic()
                 if progress:
                     try:
                         with log_path.open("rb") as progress_log:
@@ -145,9 +151,16 @@ def transcribe_audio_file(
                             percent = max(0, min(100, int(matches[-1])))
                             if percent > last_percent:
                                 last_percent = percent
-                                progress(percent / 100.0)
+                                progress(percent / 100.0, now - started_at)
+                                last_callback_at = now
                     except (OSError, ValueError):
                         pass
+                    # Some CPUs take a while before whisper.cpp prints the next
+                    # percentage. Keep the UI visibly alive without inventing a
+                    # higher model percentage.
+                    if now - last_callback_at >= 1.0:
+                        progress(max(0, last_percent) / 100.0, now - started_at)
+                        last_callback_at = now
                 if cancel_event and cancel_event.is_set():
                     process.terminate()
                     try:
@@ -158,7 +171,7 @@ def transcribe_audio_file(
                 time.sleep(0.15)
             return_code = int(process.returncode or 0)
             if progress and return_code == 0:
-                progress(1.0)
+                progress(1.0, time.monotonic() - started_at)
     except OSError as exc:
         raise TranscriptionError(
             "Offline AI engine চালু করা যায়নি। Software আবার Install করুন।"
@@ -189,7 +202,7 @@ def transcribe_video(
     prompt: str = "",
     progress: ProgressCallback | None = None,
     cancel_event: threading.Event | None = None,
-    chunk_seconds: float = 600.0,
+    chunk_seconds: float = 300.0,
 ) -> list[SubtitleSegment]:
     # Resolve before extracting audio so a damaged installation fails immediately.
     offline_components()
@@ -222,12 +235,18 @@ def transcribe_video(
                 context_prompt = (context_prompt + "\nআগের অংশ: " + previous_context[-450:]).strip()
             output_prefix = str(Path(temp_dir) / f"subtitle_{index:03d}")
 
-            def part_progress(value: float) -> None:
+            def part_progress(value: float, elapsed_seconds: float) -> None:
                 overall = (index + 0.15 + max(0.0, min(1.0, value)) * 0.80) / total_parts
+                elapsed_total = max(0, int(elapsed_seconds))
+                elapsed_minutes, elapsed_remainder = divmod(elapsed_total, 60)
+                if elapsed_minutes:
+                    elapsed_text = f"{elapsed_minutes} মিনিট {elapsed_remainder} সেকেন্ড"
+                else:
+                    elapsed_text = f"{elapsed_remainder} সেকেন্ড"
                 if progress:
                     progress(
                         overall,
-                        f"Offline বাংলা subtitle তৈরি হচ্ছে—{round(overall * 100)}% (অংশ {index + 1}/{total_parts})",
+                        f"কাজ চলছে—{round(overall * 100)}% • {elapsed_text} • অংশ {index + 1}/{total_parts}",
                     )
 
             part_segments = transcribe_audio_file(
