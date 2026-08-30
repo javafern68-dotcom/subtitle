@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -22,6 +24,7 @@ from bangla_subtitle_studio.transcription import (
     build_whisper_command,
     transcribe_audio_file,
 )
+from bangla_subtitle_studio.translation import shift_segments_earlier, translate_segments
 
 
 class SubtitleTests(unittest.TestCase):
@@ -139,6 +142,33 @@ class OfflineTranscriptionTests(unittest.TestCase):
         self.assertAlmostEqual(result[0].end, 2.0)
 
 
+class TranslationAndSyncTests(unittest.TestCase):
+    def test_subtitle_timing_is_shifted_earlier(self) -> None:
+        result = shift_segments_earlier(
+            [SubtitleSegment(1.0, 3.0, "বাংলা"), SubtitleSegment(0.1, 0.5, "শুরু")],
+            0.35,
+        )
+        self.assertAlmostEqual(result[0].start, 0.65)
+        self.assertAlmostEqual(result[0].end, 2.65)
+        self.assertEqual(result[1].start, 0.0)
+        self.assertAlmostEqual(result[1].end, 0.15)
+
+    def test_bangla_output_is_preserved(self) -> None:
+        source = [SubtitleSegment(0, 2, "বাংলা পরীক্ষা", "old")]
+        result = translate_segments(source, "bn")
+        self.assertEqual(result[0].text, "বাংলা পরীক্ষা")
+        self.assertEqual(result[0].secondary_text, "")
+
+    def test_avro_output_keeps_bangla_as_second_line(self) -> None:
+        fake_avro = types.SimpleNamespace(reverse_iter=lambda _items: ["ami banglay gan gai."])
+        with mock.patch.dict(sys.modules, {"avro": fake_avro}):
+            result = translate_segments(
+                [SubtitleSegment(0, 2, "আমি বাংলায় গান গাই।")], "avro"
+            )
+        self.assertEqual(result[0].text, "ami banglay gan gai.")
+        self.assertEqual(result[0].secondary_text, "আমি বাংলায় গান গাই।")
+
+
 class UIRegressionTests(unittest.TestCase):
     def test_color_presets_grid_isolated_from_packed_card(self) -> None:
         source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
@@ -152,8 +182,11 @@ class UIRegressionTests(unittest.TestCase):
 
     def test_offline_ui_forces_bangla_script_mode(self) -> None:
         source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
-        self.assertIn('LANGUAGES = {\n    "বাংলা (বাংলা অক্ষর)": "bn",\n}', source)
-        self.assertIn('language = "bn"', source)
+        self.assertIn('"বাংলা (বাংলা অক্ষর)": "bn"', source)
+        self.assertIn('"বাংলা (Avro / Banglish)": "avro"', source)
+        self.assertIn('"हिन्दी (Hindi)": "hi"', source)
+        self.assertIn('"العربية (Arabic)": "ar"', source)
+        self.assertIn('                    "bn",', source)
         self.assertNotIn('"Auto Detect": "auto"', source)
 
 

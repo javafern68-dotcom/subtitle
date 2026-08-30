@@ -1,2 +1,5 @@
 Pillow>=10.4,<13
-
+avro.py>=2024.10,<2027
+ctranslate2>=4.5,<5
+sentencepiece>=0.2,<0.3
+transformers>=4.45,<5

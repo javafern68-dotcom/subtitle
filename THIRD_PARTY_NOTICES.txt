@@ -11,6 +11,16 @@ Fine-tuned source: https://huggingface.co/bangla-speech-processing/BanglaASR
 Based on OpenAI Whisper: https://github.com/openai/whisper
 License: MIT
 
+M2M100 418M multilingual translation model
+Runtime model: CTranslate2 INT8 conversion bundled by the build
+Source: https://huggingface.co/facebook/m2m100_418M
+Technology: https://github.com/OpenNMT/CTranslate2
+License: MIT
+
+avro.py Bengali phonetic transliteration
+Source: https://github.com/hitblast/avro.py
+License: MIT or Apache-2.0
+
 FFmpeg
 Source: https://ffmpeg.org/
 The bundled build is redistributed under the license terms supplied by its distributor.

@@ -79,6 +79,19 @@ jobs:
           $actualHash = (Get-FileHash $model -Algorithm SHA256).Hash.ToLower()
           if ($actualHash -ne $expectedHash) { throw "Offline model checksum mismatch: $actualHash" }
 
+      - name: Build Offline 100-language Translation model
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          ct2-transformers-converter `
+            --model "facebook/m2m100_418M" `
+            --output_dir "models\m2m100-418M-int8" `
+            --quantization int8 `
+            --copy_files sentencepiece.bpe.model tokenizer_config.json special_tokens_map.json vocab.json generation_config.json
+          if (!(Test-Path "models\m2m100-418M-int8\model.bin")) { throw "Translation model conversion failed" }
+          python -m pip uninstall -y torch
+
       - name: Run automated tests
         shell: pwsh
         run: python -m unittest discover -s tests -v
@@ -89,6 +102,13 @@ jobs:
           pyinstaller --noconfirm --clean --windowed --onedir `
             --name "Bangla Subtitle Studio" `
             --icon "app.ico" `
+            --collect-all avro `
+            --collect-all ctranslate2 `
+            --collect-all sentencepiece `
+            --collect-data transformers `
+            --copy-metadata transformers `
+            --hidden-import "transformers.models.m2m_100" `
+            --hidden-import "transformers.models.m2m_100.tokenization_m2m_100" `
             --add-binary "tools\ffmpeg.exe;tools" `
             --add-binary "tools\ffprobe.exe;tools" `
             --add-binary "tools\ffplay.exe;tools" `
@@ -104,6 +124,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$app\licenses" | Out-Null
           Copy-Item "tools\whisper\*" "$app\tools\whisper" -Recurse -Force
           Copy-Item "models\ggml-banglaasr-small-q5_0.bin" "$app\models\ggml-banglaasr-small-q5_0.bin"
+          Copy-Item "models\m2m100-418M-int8" "$app\models\m2m100-418M-int8" -Recurse -Force
           Copy-Item "THIRD_PARTY_NOTICES.txt" "$app\licenses\THIRD_PARTY_NOTICES.txt"
           Copy-Item "whisper-src\LICENSE" "$app\licenses\whisper.cpp-LICENSE.txt"
 
@@ -116,6 +137,7 @@ jobs:
           if (!(Test-Path "$app\_internal\tools\ffmpeg.exe") -and !(Test-Path "$app\tools\ffmpeg.exe")) { throw "FFmpeg missing" }
           if (!(Test-Path "$app\tools\whisper\whisper-cli.exe")) { throw "Offline Whisper engine missing" }
           if (!(Test-Path "$app\models\ggml-banglaasr-small-q5_0.bin")) { throw "Offline model missing" }
+          if (!(Test-Path "$app\models\m2m100-418M-int8\model.bin")) { throw "Offline Translation model missing" }
           & "$app\tools\whisper\whisper-cli.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "Offline Whisper engine self-test failed" }
           $modelHash = (Get-FileHash "$app\models\ggml-banglaasr-small-q5_0.bin" -Algorithm SHA256).Hash.ToLower()
@@ -129,6 +151,9 @@ jobs:
           $banglaText = Get-Content "bangla-smoke.txt" -Raw -Encoding UTF8
           if ($banglaText -notmatch '[\u0980-\u09FF]') { throw "The bundled model did not create Bengali-script text: $banglaText" }
           Write-Host "Verified Bengali-script output: $banglaText"
+          $translationTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList "--translation-self-test" -Wait -PassThru
+          if ($translationTest.ExitCode -ne 0) { throw "Packaged Bengali-to-Hindi Translation self-test failed" }
+          Write-Host "Verified packaged Bengali-to-Hindi Offline Translation"
           Get-ChildItem $app -Recurse | Measure-Object -Property Length -Sum
 
       - name: Install Inno Setup
@@ -139,12 +164,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -152,30 +177,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v2.3.0"
+          $tag = "v2.4.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.exe" `
-              "installer\Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.exe" `
+              "installer\Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V2.3.0 Fast Bangla" `
-              --notes "Faster Bengali-script-only offline subtitle generation with the smaller Bengali fine-tuned Whisper Small Q5 model. Live elapsed time confirms that processing is active even while the percentage is unchanged. Real Bengali speech is verified during the build. No API key, Internet, subscription, or per-video cost. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V2.4.0 Multilanguage" `
+              --notes "Keeps the familiar V2.2 editor with faster Bengali speech recognition, Bengali Unicode and Avro/Banglish output, and Offline translation into Hindi, English, Arabic, Urdu and many more languages. Subtitles are shown 0.35 seconds earlier by default to improve voice sync, and the timing is adjustable. The build verifies real Bengali speech and packaged Bengali-to-Hindi translation. No API key, subscription, or per-video cost. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.exe" `
-              "installer\Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.exe" `
+              "installer\Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Bangla-Fast-Setup-V2.3
+          name: Bangla-Subtitle-Studio-Multilanguage-Setup-V2.4
           path: |
-            installer/Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.exe
-            installer/Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.sha256.txt
+            installer/Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.exe
+            installer/Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

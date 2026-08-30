@@ -1,4 +1,4 @@
-# Bangla Subtitle Studio V2.3 — দ্রুত বাংলা Subtitle
+# Bangla Subtitle Studio V2.4 — দ্রুত Multilanguage Subtitle
 
 বাংলা ভিডিও থেকে সময়সহ বাংলা সাবটাইটেল তৈরি, লেখা সংশোধন, স্টাইল পরিবর্তন, ভিডিওর ওপর লোগো বসানো, কালার ঠিক করা এবং নতুন MP4 Export করার Windows সফটওয়্যার।
 
@@ -9,28 +9,32 @@
 - Internet ছাড়াই যত খুশি subtitle তৈরি করা যাবে।
 - ভিডিও ও অডিও আপনার কম্পিউটারের বাইরে পাঠানো হবে না।
 - বাংলা কথার জন্য আলাদাভাবে প্রশিক্ষিত দ্রুত Whisper Bengali Small Q5 model installer-এর মধ্যেই থাকবে।
-- বাংলা (`bn`) mode সবসময় চালু থাকবে; অন্য ভাষা auto-detect বা English translation হবে না।
+- বাংলা voice দ্রুত Bengali Small model দিয়ে লেখা হবে।
+- Subtitle ভাষা হিসেবে বাংলা Unicode, বাংলা Avro/Banglish, Hindi, English, Arabic, Urdu, Nepali, Punjabi, Tamil, Telugu, Gujarati, Persian, Spanish, French, German, Italian, Portuguese, Russian, Turkish, Chinese, Japanese ও Korean নির্বাচন করা যাবে।
+- Hindi/English/Arabicসহ Translation সম্পূর্ণ Offline AI দিয়ে হবে; API key বা Internet লাগবে না।
+- Voice-এর পরে subtitle আসার সমস্যা কমাতে subtitle default ০.৩৫ সেকেন্ড আগে দেখানো হবে। এই সময় software থেকে পরিবর্তন করা যাবে।
 - কাজ চলার সময় live শতাংশ ও কত সেকেন্ড চলছে তা দেখা যাবে।
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Bangla_Fast_Setup_V2.3.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V2.3 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V2.4 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Offline Subtitle তৈরির নিয়ম
 
 ১. উপরের `ভিডিও দিন` বাটনে ক্লিক করে MP4/MOV/MKV/AVI/WebM ভিডিও দিন।  
-২. ভিডিওর ভাষা `বাংলা (বাংলা অক্ষর)` থাকবে—এটি পরিবর্তন করার প্রয়োজন নেই।  
-৩. বিশেষ কোনো নাম বা শব্দ থাকলে ঐচ্ছিক ঘরে লিখুন।  
-৪. `Generate Subtitle` ক্লিক করুন।  
-৫. কাজ চলার সময় software বন্ধ করবেন না। Internet চালু রাখার প্রয়োজন নেই।  
-৬. তৈরি হওয়া কোনো লাইনে double-click করে লেখা বা সময় ঠিক করুন।
+২. `সাবটাইটেলের ভাষা` থেকে বাংলা, Avro/Banglish, Hindi, English, Arabic অথবা পছন্দের ভাষা নির্বাচন করুন।  
+৩. Subtitle দেরিতে এলে `Subtitle আগে দেখান` ০.৩৫ থেকে ০.৫০ করুন; বেশি আগে এলে কমিয়ে দিন।  
+৪. বিশেষ কোনো নাম বা শব্দ থাকলে ঐচ্ছিক ঘরে লিখুন।  
+৫. `Generate Subtitle` ক্লিক করুন।  
+৬. কাজ চলার সময় software বন্ধ করবেন না। Internet চালু রাখার প্রয়োজন নেই।  
+৭. তৈরি হওয়া কোনো লাইনে double-click করে লেখা বা সময় ঠিক করুন।
 
-Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V2.3-এর Bengali Small model আগের V2.2 Medium model-এর তুলনায় অনেক ছোট ও দ্রুত। কাজ চলার সময় নিচে live শতাংশের সঙ্গে সেকেন্ডও বদলাবে—সেকেন্ড বাড়তে থাকলে সফটওয়্যার কাজ করছে। কম্পিউটার ও ভিডিওর দৈর্ঘ্য অনুযায়ী কিছু সময় লাগবে। Laptop হলে charger সংযুক্ত রাখলে ভালো।
+Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V2.4-এর Bengali Small model আগের V2.2 Medium model-এর তুলনায় অনেক ছোট ও দ্রুত। বাংলা Unicode ও Avro সবচেয়ে দ্রুত; অন্য ভাষা নিলে বাংলা লেখা তৈরির পরে Offline Translation-এর জন্য কিছু অতিরিক্ত সময় লাগবে। কাজ চলার সময় নিচে live শতাংশের সঙ্গে সেকেন্ডও বদলাবে—সেকেন্ড বাড়তে থাকলে software কাজ করছে।
 
 ## Subtitle Style
 

@@ -18,13 +18,35 @@ from .media import MediaError, _startupinfo, bundled_tool, extract_frame, probe_
 from .models import ColorSettings, Project, SubtitleSegment
 from .subtitles import format_srt_time, parse_srt, parse_timecode, write_srt
 from .transcription import transcribe_video
+from .translation import shift_segments_earlier, translate_segments
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
+    "বাংলা (Avro / Banglish)": "avro",
+    "हिन्दी (Hindi)": "hi",
+    "English": "en",
+    "العربية (Arabic)": "ar",
+    "اردو (Urdu)": "ur",
+    "नेपाली (Nepali)": "ne",
+    "ਪੰਜਾਬੀ (Punjabi)": "pa",
+    "தமிழ் (Tamil)": "ta",
+    "తెలుగు (Telugu)": "te",
+    "ગુજરાતી (Gujarati)": "gu",
+    "فارسی (Persian)": "fa",
+    "Español (Spanish)": "es",
+    "Français (French)": "fr",
+    "Deutsch (German)": "de",
+    "Italiano (Italian)": "it",
+    "Português (Portuguese)": "pt",
+    "Русский (Russian)": "ru",
+    "Türkçe (Turkish)": "tr",
+    "中文 (Chinese)": "zh",
+    "日本語 (Japanese)": "ja",
+    "한국어 (Korean)": "ko",
 }
 class ScrollableTab(ttk.Frame):
     def __init__(self, parent: tk.Misc) -> None:
@@ -125,6 +147,7 @@ class BanglaSubtitleStudio(tk.Tk):
             value="✓ সম্পূর্ণ Offline • API Key ও Internet লাগবে না • প্রতি ভিডিও ০ টাকা"
         )
         self.language_var = tk.StringVar(value="বাংলা (বাংলা অক্ষর)")
+        self.subtitle_lead_var = tk.DoubleVar(value=0.35)
         self.prompt_var = tk.StringVar(value="বাংলা ভাষা, বাংলাদেশের স্বাভাবিক বানান ও যতিচিহ্ন ব্যবহার করুন।")
         self.font_var = tk.StringVar(value="Nirmala UI")
         self.font_size_var = tk.DoubleVar(value=58)
@@ -232,14 +255,25 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             generator,
-            text="AI Model: Bangla Fast • শুধু বাংলা অক্ষর • লাইভ সময় ও % দেখা যাবে",
+            text="AI Model: Bangla Fast + Offline 100-language Translation • Avro-সহ",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(0, 10))
         lang_row = ttk.Frame(generator, style="Card.TFrame")
         lang_row.pack(fill="x", pady=(0, 8))
-        ttk.Label(lang_row, text="ভিডিওর ভাষা", style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(lang_row, text="সাবটাইটেলের ভাষা", style="CardTitle.TLabel").pack(side="left")
         ttk.Combobox(lang_row, textvariable=self.language_var, values=list(LANGUAGES), state="readonly", width=24).pack(side="right")
+        sync_row = ttk.Frame(generator, style="Card.TFrame")
+        sync_row.pack(fill="x", pady=(0, 8))
+        ttk.Label(sync_row, text="Subtitle আগে দেখান (সেকেন্ড)").pack(side="left")
+        ttk.Spinbox(
+            sync_row,
+            from_=0.0,
+            to=2.0,
+            increment=0.05,
+            textvariable=self.subtitle_lead_var,
+            width=7,
+        ).pack(side="right")
         ttk.Label(generator, text="বিশেষ নাম/শব্দ (ঐচ্ছিক)", style="CardTitle.TLabel").pack(anchor="w")
         ttk.Entry(generator, textvariable=self.prompt_var).pack(fill="x", pady=(4, 8))
         action_row = ttk.Frame(generator, style="Card.TFrame")
@@ -708,19 +742,37 @@ class BanglaSubtitleStudio(tk.Tk):
             return
         self._set_busy(True)
         self.busy_cancel.clear()
-        language = "bn"
+        target_language = LANGUAGES.get(self.language_var.get(), "bn")
+        prompt_text = self.prompt_var.get()
+        lead_seconds = self.subtitle_lead_var.get()
 
         def progress(value: float, message: str) -> None:
             self.after(0, lambda: self._update_progress(value, message))
 
         def worker() -> None:
             try:
+                needs_conversion = target_language != "bn"
+
+                def transcribe_progress(value: float, message: str) -> None:
+                    progress(value * (0.84 if needs_conversion else 1.0), message)
+
                 segments = transcribe_video(
                     self.project.video_path,
                     self.project.duration,
-                    language,
-                    self.prompt_var.get(),
-                    progress,
+                    "bn",
+                    prompt_text,
+                    transcribe_progress,
+                    self.busy_cancel,
+                )
+                segments = shift_segments_earlier(segments, lead_seconds)
+
+                def translation_progress(value: float, message: str) -> None:
+                    progress(0.84 + max(0.0, min(1.0, value)) * 0.16, message)
+
+                segments = translate_segments(
+                    segments,
+                    target_language,
+                    translation_progress if needs_conversion else progress,
                     self.busy_cancel,
                 )
                 self.after(0, lambda: self._finish_transcription(segments, None))
