@@ -1,4 +1,4 @@
-# Bangla Subtitle Studio V2.1 Offline Fast
+# Bangla Subtitle Studio V2.2 — শুধু বাংলা অক্ষর
 
 বাংলা ভিডিও থেকে সময়সহ বাংলা সাবটাইটেল তৈরি, লেখা সংশোধন, স্টাইল পরিবর্তন, ভিডিওর ওপর লোগো বসানো, কালার ঠিক করা এবং নতুন MP4 Export করার Windows সফটওয়্যার।
 
@@ -8,28 +8,29 @@
 - OpenAI balance বা মাসিক subscription লাগবে না।
 - Internet ছাড়াই যত খুশি subtitle তৈরি করা যাবে।
 - ভিডিও ও অডিও আপনার কম্পিউটারের বাইরে পাঠানো হবে না।
-- দ্রুত Whisper Small Offline বাংলা AI model installer-এর মধ্যেই থাকবে।
+- বেশি নির্ভুল Whisper Large V3 Turbo Offline AI model installer-এর মধ্যেই থাকবে।
+- বাংলা (`bn`) mode সবসময় চালু থাকবে; অন্য ভাষা auto-detect বা English translation হবে না।
 - কাজ চলার সময় live শতাংশ দেখা যাবে।
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Offline_Fast_Setup_V2.1.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Bangla_Setup_V2.2.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-V1 বা V2 আগে install করা থাকলে সাধারণভাবে V2.1 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V2.2 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Offline Subtitle তৈরির নিয়ম
 
 ১. উপরের `ভিডিও দিন` বাটনে ক্লিক করে MP4/MOV/MKV/AVI/WebM ভিডিও দিন।  
-২. ভিডিওর ভাষা `বাংলা` রাখুন।  
+২. ভিডিওর ভাষা `বাংলা (বাংলা অক্ষর)` থাকবে—এটি পরিবর্তন করার প্রয়োজন নেই।  
 ৩. বিশেষ কোনো নাম বা শব্দ থাকলে ঐচ্ছিক ঘরে লিখুন।  
 ৪. `Generate Subtitle` ক্লিক করুন।  
 ৫. কাজ চলার সময় software বন্ধ করবেন না। Internet চালু রাখার প্রয়োজন নেই।  
 ৬. তৈরি হওয়া কোনো লাইনে double-click করে লেখা বা সময় ঠিক করুন।
 
-Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। নতুন Fast model আগের V2-এর তুলনায় অনেক ছোট ও দ্রুত, এবং কাজ চলার সময় নিচে live শতাংশ দেখা যায়। কম্পিউটার ও ভিডিওর দৈর্ঘ্য অনুযায়ী কিছু সময় লাগবে। Laptop হলে charger সংযুক্ত রাখলে ভালো।
+Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। নতুন Turbo model বাংলা লেখার নির্ভুলতাকে অগ্রাধিকার দেয় এবং কাজ চলার সময় নিচে live শতাংশ দেখা যায়। কম্পিউটার ও ভিডিওর দৈর্ঘ্য অনুযায়ী কিছু সময় লাগবে। Laptop হলে charger সংযুক্ত রাখলে ভালো।
 
 ## Subtitle Style
 

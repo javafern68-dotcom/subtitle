@@ -21,15 +21,10 @@ from .transcription import transcribe_video
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
-    "বাংলা": "bn",
-    "Auto Detect": "auto",
-    "English": "en",
-    "Hindi": "hi",
-    "Urdu": "ur",
-    "Arabic": "ar",
+    "বাংলা (বাংলা অক্ষর)": "bn",
 }
 class ScrollableTab(ttk.Frame):
     def __init__(self, parent: tk.Misc) -> None:
@@ -129,7 +124,7 @@ class BanglaSubtitleStudio(tk.Tk):
         self.offline_status_var = tk.StringVar(
             value="✓ সম্পূর্ণ Offline • API Key ও Internet লাগবে না • প্রতি ভিডিও ০ টাকা"
         )
-        self.language_var = tk.StringVar(value="বাংলা")
+        self.language_var = tk.StringVar(value="বাংলা (বাংলা অক্ষর)")
         self.prompt_var = tk.StringVar(value="বাংলা ভাষা, বাংলাদেশের স্বাভাবিক বানান ও যতিচিহ্ন ব্যবহার করুন।")
         self.font_var = tk.StringVar(value="Nirmala UI")
         self.font_size_var = tk.DoubleVar(value=58)
@@ -237,14 +232,14 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             generator,
-            text="AI Model: Whisper Small Fast • লাইভ % দেখা যাবে • কাজের সময় Software বন্ধ করবেন না",
+            text="AI Model: Whisper Turbo Bangla • শুধু বাংলা অক্ষর • লাইভ % দেখা যাবে",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(0, 10))
         lang_row = ttk.Frame(generator, style="Card.TFrame")
         lang_row.pack(fill="x", pady=(0, 8))
         ttk.Label(lang_row, text="ভিডিওর ভাষা", style="CardTitle.TLabel").pack(side="left")
-        ttk.Combobox(lang_row, textvariable=self.language_var, values=list(LANGUAGES), state="readonly", width=15).pack(side="right")
+        ttk.Combobox(lang_row, textvariable=self.language_var, values=list(LANGUAGES), state="readonly", width=24).pack(side="right")
         ttk.Label(generator, text="বিশেষ নাম/শব্দ (ঐচ্ছিক)", style="CardTitle.TLabel").pack(anchor="w")
         ttk.Entry(generator, textvariable=self.prompt_var).pack(fill="x", pady=(4, 8))
         action_row = ttk.Frame(generator, style="Card.TFrame")
@@ -713,7 +708,7 @@ class BanglaSubtitleStudio(tk.Tk):
             return
         self._set_busy(True)
         self.busy_cancel.clear()
-        language = LANGUAGES.get(self.language_var.get(), "bn")
+        language = "bn"
 
         def progress(value: float, message: str) -> None:
             self.after(0, lambda: self._update_progress(value, message))

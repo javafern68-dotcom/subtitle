@@ -96,19 +96,21 @@ class OfflineTranscriptionTests(unittest.TestCase):
     def test_whisper_command_uses_local_model_and_srt(self) -> None:
         command = build_whisper_command(
             "whisper-cli.exe",
-            "ggml-small-q5_1.bin",
+            "ggml-large-v3-turbo-q5_0.bin",
             "audio.wav",
             "subtitle",
-            "bn",
+            "en",
             "বাংলা বানান",
             threads=4,
         )
         self.assertEqual(command[0], "whisper-cli.exe")
-        self.assertEqual(OFFLINE_MODEL_NAME, "ggml-small-q5_1.bin")
-        self.assertIn("ggml-small-q5_1.bin", command)
+        self.assertEqual(OFFLINE_MODEL_NAME, "ggml-large-v3-turbo-q5_0.bin")
+        self.assertIn("ggml-large-v3-turbo-q5_0.bin", command)
         self.assertIn("-osrt", command)
         self.assertIn("-pp", command)
-        self.assertIn("bn", command)
+        self.assertEqual(command[command.index("-l") + 1], "bn")
+        self.assertNotIn("en", command)
+        self.assertNotIn("-tr", command)
         self.assertIn("--prompt", command)
         self.assertNotIn("api.openai.com", " ".join(command))
 
@@ -147,6 +149,12 @@ class UIRegressionTests(unittest.TestCase):
         source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
         self.assertIn("সম্পূর্ণ Offline", source)
         self.assertNotIn("api_key_var", source)
+
+    def test_offline_ui_forces_bangla_script_mode(self) -> None:
+        source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
+        self.assertIn('LANGUAGES = {\n    "বাংলা (বাংলা অক্ষর)": "bn",\n}', source)
+        self.assertIn('language = "bn"', source)
+        self.assertNotIn('"Auto Detect": "auto"', source)
 
 
 if __name__ == "__main__":

@@ -22,9 +22,13 @@ class TranscriptionError(RuntimeError):
 
 ProgressCallback = Callable[[float, str], None]
 
-OFFLINE_MODEL_NAME = "ggml-small-q5_1.bin"
+OFFLINE_MODEL_NAME = "ggml-large-v3-turbo-q5_0.bin"
 OFFLINE_ENGINE_NAME = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 _WHISPER_PROGRESS_RE = re.compile(rb"progress\s*=\s*(\d{1,3})%", re.IGNORECASE)
+BANGLA_SCRIPT_PROMPT = (
+    "আমি বাংলাদেশের বাংলা ভাষায় কথা বলছি। সব কথা বাংলা অক্ষরে হুবহু লেখা হচ্ছে। "
+    "বাংলা বাক্য, বাংলা বানান এবং বাংলা যতিচিহ্ন ব্যবহার করা হচ্ছে।"
+)
 
 
 def _application_roots() -> list[Path]:
@@ -78,7 +82,7 @@ def build_whisper_command(
         "-f",
         audio_path,
         "-l",
-        language or "auto",
+        "bn",
         "-t",
         str(thread_count),
         "-osrt",
@@ -90,7 +94,7 @@ def build_whisper_command(
         "-np",
         "-pp",
     ]
-    clean_prompt = " ".join(prompt.split()).strip()
+    clean_prompt = " ".join(f"{BANGLA_SCRIPT_PROMPT} {prompt}".split()).strip()
     if clean_prompt:
         command.extend(["--prompt", clean_prompt[:700], "--carry-initial-prompt"])
     return command
@@ -189,6 +193,9 @@ def transcribe_video(
 ) -> list[SubtitleSegment]:
     # Resolve before extracting audio so a damaged installation fails immediately.
     offline_components()
+    # This edition intentionally creates Bengali-script subtitles only. Keeping the
+    # language token fixed prevents accidental auto-detection or translation.
+    language = "bn"
     total_parts = max(1, math.ceil(max(duration, 0.1) / chunk_seconds))
     combined: list[SubtitleSegment] = []
     previous_context = ""
