@@ -1,9 +1,10 @@
-# Bangla Subtitle Studio V2.4 — দ্রুত Multilanguage Subtitle
+# Bangla Subtitle Studio V2.4.1 — দ্রুত Multilanguage Subtitle (Fixed)
 
 বাংলা ভিডিও থেকে সময়সহ বাংলা সাবটাইটেল তৈরি, লেখা সংশোধন, স্টাইল পরিবর্তন, ভিডিওর ওপর লোগো বসানো, কালার ঠিক করা এবং নতুন MP4 Export করার Windows সফটওয়্যার।
 
 ## গুরুত্বপূর্ণ সুবিধা
 
+- V2.4.1-এ নতুন দ্রুত model-এর তৈরি SRT পড়ার সমস্যাটি ঠিক করা হয়েছে; একটি time line ভুল হলেও বাকি subtitle আর নষ্ট হবে না।
 - Subtitle তৈরির জন্য কোনো API key লাগবে না।
 - OpenAI balance বা মাসিক subscription লাগবে না।
 - Internet ছাড়াই যত খুশি subtitle তৈরি করা যাবে।
@@ -17,12 +18,12 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V2.4 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V2.4.1 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Offline Subtitle তৈরির নিয়ম
 
@@ -79,6 +80,7 @@ Manual controls: Brightness, Contrast, Saturation, Temperature ও Tint।
 - `Offline বাংলা AI model পাওয়া যায়নি`: V2 Offline installer আবার install করুন।
 - কাজ ধীরে হচ্ছে: নিচের “কাজ চলছে” সময় বাড়ছে কি না দেখুন, অন্য ভারী software বন্ধ করুন এবং কাজ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।
 - `পর্যাপ্ত RAM` বার্তা: অন্য software বন্ধ করে আবার চেষ্টা করুন।
+- `Offline subtitle পড়া যায়নি`: V2.4.1 install করুন; এই সংস্করণে SRT reader fix করা হয়েছে।
 - বাংলা অক্ষর box দেখায়: Windows Settings থেকে Bengali language/font support install করুন।
 - কথা ভুল লিখেছে: background music কমানো বা পরিষ্কার audio ব্যবহার করা ভালো; ভুল line-এ double-click করে সংশোধন করুন।
 

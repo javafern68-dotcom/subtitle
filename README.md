@@ -1,8 +1,14 @@
-# Bangla Subtitle Studio V2.4 Multilanguage
+# Bangla Subtitle Studio V2.4.1 Multilanguage Fixed
 
 Windows desktop software for creating timed subtitles from Bengali speech, translating them completely offline, editing subtitle text and style, placing a logo, adjusting video color, and exporting a new MP4.
 
-## What changed in V2.4
+## What changed in V2.4.1
+
+- Fixed the Offline subtitle read error reported with some generated SRT files.
+- The reader now accepts standard comma or dot milliseconds, missing blank lines, UTF-8/UTF-16 text, and keeps valid cues if one cue is damaged.
+- Every release is tested with a real Bengali audio file and the generated SRT is opened by the packaged app.
+
+## Features kept from V2.4
 
 - No OpenAI API key, billing, account, or Internet connection is required.
 - Transcription runs locally with `whisper.cpp` and a dedicated Bengali fine-tuned Whisper Small Q5 model.
@@ -19,7 +25,7 @@ The offline installer contains the approximately 175 MB Bengali speech model plu
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Multilanguage_Setup_V2.4.exe` from the `v2.4.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.exe` from the `v2.4.1` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 
@@ -31,7 +37,7 @@ The GitHub Actions workflow builds and bundles:
 - verified `ggml-banglaasr-small-q5_0.bin` Bengali fine-tuned model
 - bundled INT8 M2M100 translation model covering 100 languages
 - bundled Avro/Banglish reverse transliteration
-- real Bengali speech test that must produce Bengali Unicode text
+- real Bengali speech test that must produce Bengali Unicode text and a readable timed SRT
 - packaged Bengali-to-Hindi translation test that must produce Devanagari text
 - Inno Setup installer and SHA-256 checksum
 

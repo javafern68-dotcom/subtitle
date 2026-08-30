@@ -190,9 +190,14 @@ def transcribe_audio_file(
     if not srt_path.is_file():
         raise TranscriptionError("Offline AI কোনো subtitle তৈরি করেনি। ভিডিওতে স্পষ্ট কথা আছে কি না দেখুন।")
     try:
-        return parse_srt(srt_path)
-    except (OSError, ValueError) as exc:
+        segments = parse_srt(srt_path)
+    except OSError as exc:
         raise TranscriptionError("তৈরি হওয়া Offline subtitle পড়া যায়নি।") from exc
+    if not segments:
+        raise TranscriptionError(
+            "ভিডিওতে স্পষ্ট বাংলা কথা পাওয়া যায়নি। অন্য একটি পরিষ্কার অডিও/ভিডিও দিয়ে চেষ্টা করুন।"
+        )
+    return segments
 
 
 def transcribe_video(

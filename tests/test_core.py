@@ -13,6 +13,7 @@ from bangla_subtitle_studio.models import ColorSettings, LogoSettings, Project, 
 from bangla_subtitle_studio.subtitles import (
     format_srt_time,
     parse_srt,
+    parse_srt_text,
     parse_timecode,
     split_for_readability,
     write_ass,
@@ -43,6 +44,32 @@ class SubtitleTests(unittest.TestCase):
             loaded = parse_srt(path)
         self.assertEqual([item.text for item in loaded], [item.text for item in items])
         self.assertAlmostEqual(loaded[0].start, 0.25)
+
+    def test_whisper_srt_without_blank_lines_is_recovered(self) -> None:
+        text = (
+            "1\n00:00:00.000 --> 00:00:02.250\nবাংলা প্রথম লাইন\n"
+            "2\n0:02.25 --> 0:04.5\nবাংলা দ্বিতীয় লাইন\n"
+        )
+        loaded = parse_srt_text(text)
+        self.assertEqual([item.text for item in loaded], ["বাংলা প্রথম লাইন", "বাংলা দ্বিতীয় লাইন"])
+        self.assertAlmostEqual(loaded[1].start, 2.25)
+        self.assertAlmostEqual(loaded[1].end, 4.5)
+
+    def test_one_damaged_cue_does_not_discard_valid_cues(self) -> None:
+        text = (
+            "1\n00:00:00,000 --> 00:00:01,000\nশুরু\n\n"
+            "2\nbad time --> 00:00:02,000\nএই অংশ বাদ যাবে\n\n"
+            "3\n00:00:02,000 --> 00:00:03,000\nশেষ\n"
+        )
+        loaded = parse_srt_text(text)
+        self.assertEqual([item.text for item in loaded], ["শুরু", "শেষ"])
+
+    def test_utf16_srt_is_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "utf16.srt"
+            path.write_bytes("1\n00:00:00,000 --> 00:00:01,000\nবাংলা\n".encode("utf-16"))
+            loaded = parse_srt(path)
+        self.assertEqual(loaded[0].text, "বাংলা")
 
     def test_ass_contains_bangla_and_secondary_color(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

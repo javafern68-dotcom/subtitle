@@ -22,7 +22,7 @@ from .translation import shift_segments_earlier, translate_segments
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",

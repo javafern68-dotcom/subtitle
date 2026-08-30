@@ -7,16 +7,22 @@ from .models import SubtitleSegment, SubtitleStyle
 
 
 TIMECODE_RE = re.compile(
-    r"(?P<h>\d{1,2}):(?P<m>\d{2}):(?P<s>\d{2})[,.](?P<ms>\d{1,3})"
+    r"(?<!\d)(?:(?P<h>\d{1,4})\s*:\s*)?"
+    r"(?P<m>\d{1,2})\s*:\s*(?P<s>\d{1,2})"
+    r"(?:\s*[,.]\s*(?P<ms>\d{1,3}))?(?!\d)"
 )
+ARROW_RE = re.compile(r"\s*(?:-->|-+\s*>|→)\s*")
 
 
 def parse_timecode(value: str) -> float:
     match = TIMECODE_RE.search(value.strip())
     if not match:
         raise ValueError(f"Invalid subtitle time: {value}")
-    parts = {key: int(number) for key, number in match.groupdict().items()}
-    return parts["h"] * 3600 + parts["m"] * 60 + parts["s"] + parts["ms"] / (10 ** len(match.group("ms")))
+    hours = int(match.group("h") or 0)
+    minutes = int(match.group("m"))
+    seconds = int(match.group("s"))
+    fraction = match.group("ms") or "0"
+    return hours * 3600 + minutes * 60 + seconds + int(fraction) / (10 ** len(fraction))
 
 
 def format_srt_time(seconds: float) -> str:
@@ -35,28 +41,63 @@ def format_ass_time(seconds: float) -> str:
     return f"{hours:d}:{minutes:02d}:{secs:02d}.{centiseconds:02d}"
 
 
-def parse_srt(path: str | Path) -> list[SubtitleSegment]:
-    text = Path(path).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
-    blocks = re.split(r"\n\s*\n", text.strip()) if text.strip() else []
+def _decode_subtitle(data: bytes) -> str:
+    """Decode subtitle output without rejecting a whole job for one bad byte."""
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", errors="replace")
+    return data.decode("utf-8-sig", errors="replace")
+
+
+def _timeline(line: str) -> tuple[float, float] | None:
+    parts = ARROW_RE.split(line.strip(), maxsplit=1)
+    if len(parts) != 2:
+        return None
+    try:
+        start = parse_timecode(parts[0])
+        end = parse_timecode(parts[1])
+    except ValueError:
+        return None
+    return start, max(start + 0.05, end)
+
+
+def parse_srt_text(text: str) -> list[SubtitleSegment]:
+    """Read standard and mildly malformed Whisper SRT output.
+
+    Some Whisper/model combinations omit blank lines, use a dot for
+    milliseconds, or produce one damaged timestamp. Valid neighbouring cues
+    must still be kept instead of rejecting the complete transcription.
+    """
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+    cue_rows: list[tuple[int, tuple[float, float] | None]] = []
+    for index, line in enumerate(lines):
+        if len(ARROW_RE.split(line.strip(), maxsplit=1)) == 2:
+            cue_rows.append((index, _timeline(line)))
+
     result: list[SubtitleSegment] = []
-    for block in blocks:
-        lines = [line.rstrip() for line in block.splitlines()]
-        time_index = next((i for i, line in enumerate(lines) if "-->" in line), None)
-        if time_index is None:
+    for cue_index, (line_index, timing) in enumerate(cue_rows):
+        if timing is None:
             continue
-        start_text, end_text = lines[time_index].split("-->", 1)
-        body = "\n".join(lines[time_index + 1 :]).strip()
-        if not body:
-            continue
-        result.append(
-            SubtitleSegment(
-                parse_timecode(start_text),
-                parse_timecode(end_text),
-                body,
-                "",
-            ).normalized()
-        )
+        start, end = timing
+        next_line_index = cue_rows[cue_index + 1][0] if cue_index + 1 < len(cue_rows) else len(lines)
+        body_lines = [line.strip() for line in lines[line_index + 1 : next_line_index]]
+        while body_lines and not body_lines[0]:
+            body_lines.pop(0)
+        while body_lines and not body_lines[-1]:
+            body_lines.pop()
+        # The next cue number belongs to the following timeline when SRT blocks
+        # are not separated by a blank line.
+        if body_lines and body_lines[-1].isdigit():
+            body_lines.pop()
+            while body_lines and not body_lines[-1]:
+                body_lines.pop()
+        body = "\n".join(line for line in body_lines if line).strip()
+        if body:
+            result.append(SubtitleSegment(start, end, body, "").normalized())
     return result
+
+
+def parse_srt(path: str | Path) -> list[SubtitleSegment]:
+    return parse_srt_text(_decode_subtitle(Path(path).read_bytes()))
 
 
 def write_srt(path: str | Path, segments: list[SubtitleSegment], include_secondary: bool = True) -> None:
