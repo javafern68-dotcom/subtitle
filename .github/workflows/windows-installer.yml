@@ -99,6 +99,8 @@ jobs:
       - name: Build standalone Windows application
         shell: pwsh
         run: |
+          $avroPackage = python -c "import avro, pathlib; print(pathlib.Path(avro.__file__).parent)"
+          "2025.11.3" | Out-File (Join-Path $avroPackage "VERSION.txt") -Encoding ascii
           pyinstaller --noconfirm --clean --windowed --onedir `
             --name "Bangla Subtitle Studio" `
             --icon "app.ico" `
