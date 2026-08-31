@@ -207,6 +207,14 @@ def _valid_target_script(source: str, translated: str, target: str) -> bool:
     pattern = _TARGET_SCRIPT_PATTERNS.get(target)
     if pattern and not pattern.search(clean):
         return False
+    if pattern:
+        letters = [character for character in clean if character.isalpha()]
+        target_letters = sum(bool(pattern.fullmatch(character)) for character in letters)
+        # A single target-language letter is not enough for dubbing. Reject a
+        # response that is mostly still written in the source alphabet so the
+        # voice engine never receives mixed Hindi/Bengali/English garbage.
+        if letters and target_letters / len(letters) < 0.55:
+            return False
     return _comparison_text(clean) != _comparison_text(source)
 
 
@@ -303,7 +311,12 @@ def translate_voice_segments(
             used = 0
             while end < len(source_texts):
                 additional = len(source_texts[end]) + 24
-                if end > start and used + additional > 3_000:
+                # Keep phrase markers close to their own translation. Sending
+                # an entire long video at once can make a web translator merge
+                # or reorder distant lines even when the words are correct.
+                if end > start and (
+                    used + additional > 1_200 or end - start >= 8
+                ):
                     break
                 used += additional
                 end += 1
@@ -326,7 +339,7 @@ def translate_voice_segments(
                     f"Accurate Online Translation—{completed}/{len(segments)} বাক্য",
                 )
             if batch_index + 1 < len(batches):
-                time.sleep(1.5)
+                time.sleep(0.6)
         return [
             SubtitleSegment(item.start, item.end, translated[index], item.text)
             for index, item in enumerate(segments)
@@ -469,11 +482,11 @@ def translate_segments(
                 chosen = _select_semantic_candidate(
                     batch[local_index], candidates, candidate_backs
                 )
-                output = (
-                    _preserve_greeting(batch[local_index], chosen, target)
-                    if source == "bn"
-                    else chosen
-                )
+                output = _preserve_greeting(batch[local_index], chosen, target)
+                if not _valid_target_script(batch[local_index], output, target):
+                    raise TranslationError(
+                        "Offline Translation-এর একটি বাক্য সঠিক ভাষায় তৈরি হয়নি।"
+                    )
                 translated.append(
                     _title_case_latin_words(output) if target == "en" else output
                 )

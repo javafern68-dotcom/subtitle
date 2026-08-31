@@ -12,7 +12,6 @@ from typing import Callable
 from .media import _startupinfo, bundled_tool
 from .models import SubtitleSegment
 from .transcription import transcribe_video
-from .subtitles import merge_short_segments
 from .translation import translate_voice_segments
 
 
@@ -35,14 +34,6 @@ _PREFERRED_VOICES = {
     ("ur", "Female"): "ur-PK-UzmaNeural",
     ("ur", "Male"): "ur-PK-AsadNeural",
 }
-_SOURCE_SCRIPT_PROMPTS = {
-    "hi": "यह हिंदी भाषा में बोला गया वाक्य है।",
-    "ar": "هذا نص منطوق باللغة العربية.",
-    "ur": "یہ اردو زبان میں بولا گیا جملہ ہے۔",
-    "bn": "এটি বাংলা ভাষায় বলা বাক্য।",
-}
-
-
 def _cancelled(cancel_event: threading.Event | None) -> bool:
     return bool(cancel_event and cancel_event.is_set())
 
@@ -167,41 +158,53 @@ def _atempo_expression(tempo: float) -> str:
     return ",".join(f"atempo={factor:.5f}" for factor in factors)
 
 
-def _fit_speech_to_cue(source_path: str, output_path: str, cue_duration: float) -> None:
+def _fit_speech_to_cue(source_path: str, output_path: str, cue_duration: float) -> float:
+    """Fit the complete utterance inside a cue without slowing or truncating it."""
     ffmpeg = bundled_tool("ffmpeg")
     source_duration = _probe_audio_duration(source_path)
-    target_duration = max(0.35, cue_duration - 0.04)
-    tempo = max(0.80, source_duration / target_duration)
-    completed = subprocess.run(
-        [
-            ffmpeg,
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-i",
-            source_path,
-            "-vn",
-            "-af",
-            _atempo_expression(tempo),
-            "-ac",
-            "1",
-            "-ar",
-            str(VOICE_SAMPLE_RATE),
-            "-c:a",
-            "pcm_s16le",
-            output_path,
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        startupinfo=_startupinfo(),
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise VoiceTranslationError(
-            completed.stderr.decode("utf-8", "replace").strip()
-            or "Translated voice-এর গতি মূল কথার সঙ্গে মেলানো যায়নি।"
+    target_duration = max(0.35, cue_duration - 0.06)
+    # A shorter translated phrase must keep its natural voice rate. Only speed
+    # up a phrase that would otherwise cross into the next source phrase.
+    tempo = max(1.0, source_duration / target_duration * 1.025)
+    output_duration = source_duration
+    for _attempt in range(2):
+        completed = subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                source_path,
+                "-vn",
+                "-af",
+                _atempo_expression(tempo),
+                "-ac",
+                "1",
+                "-ar",
+                str(VOICE_SAMPLE_RATE),
+                "-c:a",
+                "pcm_s16le",
+                output_path,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            startupinfo=_startupinfo(),
+            check=False,
         )
+        if completed.returncode != 0:
+            raise VoiceTranslationError(
+                completed.stderr.decode("utf-8", "replace").strip()
+                or "Translated voice-এর গতি মূল কথার সঙ্গে মেলানো যায়নি।"
+            )
+        output_duration = _probe_audio_duration(output_path)
+        if output_duration <= target_duration + 0.025:
+            return output_duration
+        # FFmpeg/MP3 padding can leave a small overrun. Refit from the original
+        # speech instead of cutting the end of the translated sentence.
+        tempo *= output_duration / target_duration * 1.02
+    return output_duration
 
 
 def _write_silence(writer: wave.Wave_write, frame_count: int) -> None:
@@ -248,26 +251,32 @@ def _build_timed_voice_track(
                         time.sleep(1.0)
             if last_error:
                 raise last_error
-            _fit_speech_to_cue(mp3_path, wav_path, item.end - item.start)
+            next_start = (
+                ordered[index + 1].start
+                if index + 1 < len(ordered)
+                else max(duration, item.end)
+            )
+            # The phrase may use the source pause after it, but must finish just
+            # before the next phrase starts. This avoids both word cutting and
+            # voices speaking on top of one another.
+            available_duration = max(
+                0.35,
+                next_start - item.start - 0.04,
+            )
+            _fit_speech_to_cue(mp3_path, wav_path, available_duration)
             start_frame = max(0, round(item.start * VOICE_SAMPLE_RATE))
-            end_frame = max(start_frame + 1, round(item.end * VOICE_SAMPLE_RATE))
             if start_frame > current_frame:
                 _write_silence(writer, start_frame - current_frame)
                 current_frame = start_frame
             with wave.open(wav_path, "rb") as reader:
-                data = reader.readframes(max(0, end_frame - current_frame))
-            allowed_bytes = max(0, end_frame - current_frame) * 2
-            data = data[:allowed_bytes]
+                data = reader.readframes(reader.getnframes())
             if data:
                 writer.writeframesraw(data)
                 current_frame += len(data) // 2
-            if current_frame < end_frame:
-                _write_silence(writer, end_frame - current_frame)
-                current_frame = end_frame
             if progress:
                 progress(
                     (index + 1) / max(1, len(ordered)),
-                    f"Natural translated voice তৈরি হচ্ছে—{index + 1}/{len(ordered)} line",
+                    f"Natural translated voice তৈরি হচ্ছে—{index + 1}/{len(ordered)} phrase",
                 )
         final_frame = max(current_frame, round(max(0.1, duration) * VOICE_SAMPLE_RATE))
         if current_frame < final_frame:
@@ -419,17 +428,16 @@ def create_voice_translated_video(
         video_path,
         duration,
         source,
-        _SOURCE_SCRIPT_PROMPTS.get(source, ""),
+        "",
         transcribe_progress,
         cancel_event,
         multilingual=True,
-    )
-    source_segments = merge_short_segments(
-        source_segments,
-        max_words=20,
-        max_chars=150,
-        max_duration=12.0,
-        max_gap=0.70,
+        # Dubbing needs short, timed phrases. V3.1 joined these again into
+        # twelve-second lines, which produced long silences and clipped speech.
+        segment_max_words=10,
+        segment_max_chars=76,
+        segment_max_duration=5.5,
+        segment_max_gap=0.38,
     )
 
     def translation_progress(value: float, message: str) -> None:

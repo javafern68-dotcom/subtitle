@@ -1,10 +1,19 @@
-# Bangla Subtitle Studio V3.1 Accurate Voice
+# Bangla Subtitle Studio V3.2 Synced Dubbing
+
+## V3.2 complete phrase and timing fix
+
+- Hindi-to-Bengali dubbing is split into short phrases of at most 10 source words or 5.5 seconds instead of reconnecting speech into 12-second blocks.
+- A translated phrase is never slowed unnaturally and its final words are never trimmed; a longer phrase is fitted completely before the next phrase starts.
+- Natural source pauses remain silent without stretching the preceding Bengali voice across the pause.
+- Generic Whisper prompt text was removed from multilingual recognition so it cannot be repeated or confused with the real Hindi speech.
+- Mixed Hindi/Bengali/English alphabet output is rejected before speech generation.
+- The packaged test now requires multiple short phrases, Hindi-to-Bengali meaning, no missing audio and no internal silence longer than 2.2 seconds in a continuous sample.
 
 ## V3.1 accuracy and speed update
 
 - Bengali-to-English, English-to-Bengali, Bengali-to-Hindi, Hindi-to-Bengali, Hindi-to-English, and English-to-Hindi Voice Translate use sentence-level Google translation first.
 - Every online result is checked for the target writing system; invalid text is rejected automatically.
-- All subtitle sentences are sent in one bounded Google request to reduce rate limits; the bundled meaning-checked Offline M2M100 model is the automatic fallback.
+- Subtitle sentences are sent in small bounded Google batches so distant lines cannot be merged or reordered; the bundled meaning-checked Offline M2M100 model is the automatic fallback.
 - Non-Bengali source recognition is upgraded from Whisper Small to verified Whisper Large V3 Turbo Q5_0 for more faithful Hindi and English speech-to-text.
 - Adjacent voice fragments are joined into complete sentences before translation, preserving context.
 - Online translation avoids loading the large Offline translation model in the normal path, making the 34–56% stage much faster.
@@ -67,7 +76,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.exe` from the `v3.1.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.exe` from the `v3.2.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 

@@ -1,10 +1,13 @@
 import re
 import sys
+import tempfile
 import traceback
+import wave
+from array import array
 from pathlib import Path
 
 from bangla_subtitle_studio.app import main
-from bangla_subtitle_studio.media import probe_video
+from bangla_subtitle_studio.media import extract_audio_chunk, probe_video
 from bangla_subtitle_studio.models import SubtitleSegment
 from bangla_subtitle_studio.subtitles import parse_srt
 from bangla_subtitle_studio.translation import translate_segments
@@ -59,6 +62,43 @@ def srt_self_test(path: str) -> None:
         raise RuntimeError(f"Bengali SRT self-test failed: {text}")
 
 
+def _longest_internal_silence(video_path: str, duration: float) -> float:
+    """Measure silence between the first and last spoken TTS windows."""
+    with tempfile.TemporaryDirectory(prefix="dub_silence_test_") as temp_dir:
+        audio_path = str(Path(temp_dir) / "dub.wav")
+        extract_audio_chunk(video_path, audio_path, 0.0, duration)
+        with wave.open(audio_path, "rb") as reader:
+            rate = reader.getframerate()
+            window_frames = max(1, rate // 10)
+            active: list[bool] = []
+            while True:
+                chunk = reader.readframes(window_frames)
+                if not chunk:
+                    break
+                samples = array("h")
+                samples.frombytes(chunk)
+                if sys.byteorder != "little":
+                    samples.byteswap()
+                rms = (
+                    (sum(sample * sample for sample in samples) / len(samples)) ** 0.5
+                    if samples
+                    else 0.0
+                )
+                active.append(rms >= 120.0)
+    spoken = [index for index, value in enumerate(active) if value]
+    if not spoken:
+        return duration
+    longest = 0
+    current = 0
+    for value in active[spoken[0] : spoken[-1] + 1]:
+        if value:
+            longest = max(longest, current)
+            current = 0
+        else:
+            current += 1
+    return longest * 0.1
+
+
 def voice_translate_self_test(input_video: str, output_video: str) -> None:
     log_path = Path(output_video + ".test.log")
     progress_lines: list[str] = []
@@ -85,9 +125,25 @@ def voice_translate_self_test(input_video: str, output_video: str) -> None:
             raise RuntimeError(f"Hindi voice did not become Bengali text/voice: {text}")
         if not Path(output_video).is_file() or Path(output_video).stat().st_size < 10_000:
             raise RuntimeError("Bengali dubbed video was not created")
+        meaning_hits = sum(
+            bool(re.search(pattern, text))
+            for pattern in (r"কেমন|কীভাবে", r"ভালো|ঠিক", r"দিন")
+        )
+        if meaning_hits < 2:
+            raise RuntimeError(f"Hindi-to-Bengali meaning test failed: {text}")
+        if len(segments) < 2 or any(item.end - item.start > 6.0 for item in segments):
+            raise RuntimeError(f"Dubbing was not split into short timed phrases: {segments}")
         output_info = probe_video(output_video)
         if float(output_info["duration"]) < 0.5:
             raise RuntimeError("Bengali dubbed video is empty")
+        longest_silence = _longest_internal_silence(
+            output_video, float(output_info["duration"])
+        )
+        progress_lines.append(f"Longest internal silence: {longest_silence:.2f}s")
+        if longest_silence > 2.2:
+            raise RuntimeError(
+                f"Dubbed voice contains a long internal silence: {longest_silence:.2f}s"
+            )
         progress_lines.append(f"Output duration: {output_info['duration']}")
         log_path.write_text("\n".join(progress_lines), encoding="utf-8")
     except Exception:

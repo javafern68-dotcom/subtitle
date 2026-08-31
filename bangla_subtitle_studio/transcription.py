@@ -255,6 +255,10 @@ def transcribe_video(
     cancel_event: threading.Event | None = None,
     chunk_seconds: float = 180.0,
     multilingual: bool = False,
+    segment_max_words: int = 12,
+    segment_max_chars: int = 88,
+    segment_max_duration: float = 7.0,
+    segment_max_gap: float = 0.55,
 ) -> list[SubtitleSegment]:
     # Resolve before extracting audio so a damaged installation fails immediately.
     requested_language = language.strip().lower()
@@ -335,9 +339,13 @@ def transcribe_video(
                 )
     sentence_segments = merge_short_segments(
         combined,
-        max_words=12,
-        max_chars=88,
-        max_duration=7.0,
-        max_gap=0.55,
+        max_words=segment_max_words,
+        max_chars=segment_max_chars,
+        max_duration=segment_max_duration,
+        max_gap=segment_max_gap,
     )
-    return split_for_readability(sentence_segments, max_words=12, max_duration=7.0)
+    return split_for_readability(
+        sentence_segments,
+        max_words=segment_max_words,
+        max_duration=segment_max_duration,
+    )

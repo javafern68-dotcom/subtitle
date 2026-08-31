@@ -23,7 +23,7 @@ from .voice_translate import create_voice_translated_video
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "3.1.0"
+APP_VERSION = "3.2.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -385,7 +385,7 @@ class BanglaSubtitleStudio(tk.Tk):
         audio_card = self._section(parent, "নতুন voice ও সময়")
         ttk.Label(
             audio_card,
-            text="প্রতিটি অনুবাদ করা বাক্যের voice মূল কথার শুরু, শেষ ও বিরতির সঙ্গে মেলানো হবে।",
+            text="প্রতিটি ছোট phrase সম্পূর্ণ বলা হবে; কোনো শব্দ না কেটে মূল কথার সময় ও বিরতির সঙ্গে মেলানো হবে।",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x")

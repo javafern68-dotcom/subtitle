@@ -203,8 +203,9 @@ jobs:
             }
             throw "Packaged Hindi-to-Bengali Voice Translate self-test failed"
           }
+          Get-Content "bengali-dub-smoke.mp4.test.log" -Raw -Encoding UTF8
           if (!(Test-Path "bengali-dub-smoke.mp4")) { throw "Bengali dubbed smoke video missing" }
-          Write-Host "Verified full Hindi voice to Bengali voice video pipeline"
+          Write-Host "Verified short, complete and silence-safe Hindi-to-Bengali dubbing pipeline"
           Get-ChildItem $app -Recurse | Measure-Object -Property Length -Sum
 
       - name: Install Inno Setup
@@ -215,12 +216,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -228,30 +229,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v3.1.0"
+          $tag = "v3.2.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.exe" `
-              "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.exe" `
+              "installer\Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V3.1 Accurate Voice" `
-              --notes "Accuracy-first Voice Translate update. Bengali-to-English, English-to-Bengali, Bengali-to-Hindi, Hindi-to-Bengali, Hindi-to-English and English-to-Hindi translate complete sentences through one bounded Google request first and the bundled meaning-checked Offline AI second. Every result is validated for the target writing system. Non-Bengali source speech recognition is upgraded from Whisper Small to verified Whisper Large V3 Turbo Q5_0. Adjacent fragments are joined into complete sentences before translation. No API key or per-video charge. Microsoft natural voice and automatic Google voice fallback remain. The packaged Windows app must pass target-script validation, real Google Bengali voice generation, and a full Hindi-voice-to-Bengali-voice video test before release. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V3.2 Synced Dubbing" `
+              --notes "Hindi-to-Bengali dubbing timing fix. Source speech is kept in short timed phrases instead of reconnecting it into twelve-second blocks. A translated phrase keeps a natural rate when short and is fitted completely without trimming final words when long. Source pauses remain in place, generic Whisper prompts are removed, and mixed-script translations are rejected before voice synthesis. No API key or per-video charge. The packaged Windows app must pass Hindi-to-Bengali meaning, short-phrase, complete-audio and internal-silence checks before release. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.exe" `
-              "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.exe" `
+              "installer\Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Accurate-Voice-Setup-V3.1
+          name: Bangla-Subtitle-Studio-Synced-Dubbing-Setup-V3.2
           path: |
-            installer/Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.exe
-            installer/Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.sha256.txt
+            installer/Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.exe
+            installer/Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

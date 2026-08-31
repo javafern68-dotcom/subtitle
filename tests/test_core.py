@@ -5,6 +5,7 @@ import sys
 import tempfile
 import types
 import unittest
+import wave
 from pathlib import Path
 from unittest import mock
 
@@ -29,7 +30,9 @@ from bangla_subtitle_studio.transcription import (
     transcribe_audio_file,
 )
 from bangla_subtitle_studio.voice_translate import (
+    VOICE_SAMPLE_RATE,
     _atempo_expression,
+    _build_timed_voice_track,
     _online_voice,
     _save_speech,
     _select_voice,
@@ -47,6 +50,7 @@ from bangla_subtitle_studio.translation import (
     shift_segments,
     shift_segments_earlier,
     translate_segments,
+    translate_voice_segments,
 )
 
 
@@ -249,6 +253,15 @@ class TranslationAndSyncTests(unittest.TestCase):
             with self.subTest(target=target, translated=translated):
                 self.assertTrue(_valid_target_script(source, translated, target))
 
+    def test_mixed_source_alphabet_is_rejected_before_voice_generation(self) -> None:
+        self.assertFalse(
+            _valid_target_script(
+                "आप कैसे हैं और आज क्या कर रहे हैं",
+                "आप कैसे हैं और আজ क्या कर रहे हैं",
+                "bn",
+            )
+        )
+
     @mock.patch("bangla_subtitle_studio.translation.urllib.request.urlopen")
     def test_google_translation_response_is_parsed_and_validated(
         self, urlopen: mock.Mock
@@ -280,6 +293,24 @@ class TranslationAndSyncTests(unittest.TestCase):
             ["How Are You?", "I Am Fine."],
         )
         google.assert_called_once()
+
+    @mock.patch("bangla_subtitle_studio.translation.time.sleep")
+    @mock.patch("bangla_subtitle_studio.translation._google_translate_texts")
+    def test_long_video_uses_small_ordered_translation_batches(
+        self, google: mock.Mock, _sleep: mock.Mock
+    ) -> None:
+        google.side_effect = lambda batch, _source, _target: [
+            f"English Phrase {index + 1}" for index, _value in enumerate(batch)
+        ]
+        source = [
+            SubtitleSegment(index, index + 0.8, f"বাংলা বাক্য {index + 1}")
+            for index in range(9)
+        ]
+        result = translate_voice_segments(source, "en", source_language="bn")
+        self.assertEqual(len(result), 9)
+        self.assertEqual(google.call_count, 2)
+        self.assertEqual(len(google.call_args_list[0].args[0]), 8)
+        self.assertEqual(len(google.call_args_list[1].args[0]), 1)
 
     def test_semantic_reranking_prefers_meaning_preserving_translation(self) -> None:
         chosen = _select_semantic_candidate(
@@ -404,6 +435,41 @@ class VoiceTranslationTests(unittest.TestCase):
             "atempo=2.00000,atempo=2.00000,atempo=1.12500",
         )
 
+    @mock.patch("bangla_subtitle_studio.voice_translate._fit_speech_to_cue")
+    @mock.patch("bangla_subtitle_studio.voice_translate._save_speech")
+    def test_timed_voice_keeps_complete_phrases_and_natural_pauses(
+        self, _save: mock.Mock, fit: mock.Mock
+    ) -> None:
+        def write_half_second(_source: str, output: str, _duration: float) -> float:
+            with wave.open(output, "wb") as writer:
+                writer.setnchannels(1)
+                writer.setsampwidth(2)
+                writer.setframerate(VOICE_SAMPLE_RATE)
+                writer.writeframes(b"\x01\x00" * (VOICE_SAMPLE_RATE // 2))
+            return 0.5
+
+        fit.side_effect = write_half_second
+        segments = [
+            SubtitleSegment(0.0, 1.0, "প্রথম কথা"),
+            SubtitleSegment(2.0, 3.0, "দ্বিতীয় কথা"),
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = str(Path(temp_dir) / "track.wav")
+            _build_timed_voice_track(
+                segments, "bn-BD-NabanitaNeural", 3.0, output, temp_dir
+            )
+            with wave.open(output, "rb") as reader:
+                frames = reader.readframes(reader.getnframes())
+
+        # Both complete half-second phrases are present; the source pause is
+        # silence rather than a stretched or clipped translated word.
+        first = frames[: VOICE_SAMPLE_RATE]
+        pause = frames[VOICE_SAMPLE_RATE : 4 * VOICE_SAMPLE_RATE]
+        second = frames[4 * VOICE_SAMPLE_RATE : 5 * VOICE_SAMPLE_RATE]
+        self.assertNotEqual(first, b"\x00" * len(first))
+        self.assertEqual(pause, b"\x00" * len(pause))
+        self.assertNotEqual(second, b"\x00" * len(second))
+
     def test_google_bengali_voice_is_used_when_microsoft_is_unreachable(self) -> None:
         edge_module = types.ModuleType("edge_tts")
 
@@ -465,7 +531,9 @@ class VoiceTranslationTests(unittest.TestCase):
             )
         self.assertEqual(result[0].text, "How Are You")
         self.assertTrue(transcribe.call_args.kwargs["multilingual"])
-        self.assertIn("हिंदी", transcribe.call_args.args[3])
+        self.assertEqual(transcribe.call_args.args[3], "")
+        self.assertEqual(transcribe.call_args.kwargs["segment_max_words"], 10)
+        self.assertEqual(transcribe.call_args.kwargs["segment_max_duration"], 5.5)
         self.assertEqual(translate.call_args.kwargs["source_language"], "hi")
         self.assertEqual(translate.call_args.args[1], "en")
         mux.assert_called_once()
