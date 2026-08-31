@@ -42,6 +42,7 @@ from bangla_subtitle_studio.translation import (
     _google_translate_text,
     _google_translate_texts,
     _ensure_runtime_streams,
+    _normalize_target_fluency,
     _preserve_greeting,
     _select_semantic_candidate,
     _valid_target_script,
@@ -327,6 +328,14 @@ class TranslationAndSyncTests(unittest.TestCase):
             "en",
         )
         self.assertEqual(result, "Assalamu Alaikum। How is everyone?")
+
+    def test_literal_hindi_fallback_becomes_natural_spoken_bengali(self) -> None:
+        self.assertEqual(
+            _normalize_target_fluency(
+                "আপনি কিভাবে? আমি ঠিক আছে। আজ খুব ভালো দিন।", "bn"
+            ),
+            "আপনি কেমন আছেন? আমি ঠিক আছি। আজ খুব ভালো দিন।",
+        )
 
     def test_subtitle_timing_is_shifted_earlier(self) -> None:
         result = shift_segments_earlier(

@@ -1,4 +1,8 @@
-# Bangla Subtitle Studio V3.2 Synced Dubbing
+# Bangla Subtitle Studio V3.2.1 Natural Synced Dubbing
+
+## V3.2.1 natural Bengali and timing fix
+
+- Common literal Hindi fallback such as `আপনি কিভাবে? আমি ঠিক আছে।` is normalized to natural spoken Bengali: `আপনি কেমন আছেন? আমি ঠিক আছি।`.
 
 ## V3.2 complete phrase and timing fix
 
@@ -76,7 +80,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Synced_Dubbing_Setup_V3.2.exe` from the `v3.2.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.exe` from the `v3.2.1` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 

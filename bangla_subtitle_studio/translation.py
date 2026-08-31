@@ -200,6 +200,31 @@ def _preserve_greeting(source: str, translated: str, target: str) -> str:
     return greeting + ("। " + rest if rest else "")
 
 
+def _normalize_target_fluency(text: str, target: str) -> str:
+    """Repair frequent literal agreement errors before natural voice synthesis."""
+    output = " ".join(text.split()).strip()
+    if target != "bn":
+        return output
+    # M2M100 can translate Hindi "aap kaise hain" literally as "আপনি কিভাবে"
+    # and keep the third-person verb "আছে" after "আমি". Both are immediately
+    # noticeable in spoken Bengali, so fix these narrow, unambiguous patterns.
+    output = re.sub(
+        r"\bআপনি\s+(?:কিভাবে|কীভাবে)(?:\s+আছেন)?(?=\s*[?？।!]|$)",
+        "আপনি কেমন আছেন",
+        output,
+    )
+    output = re.sub(
+        r"\bতুমি\s+(?:কিভাবে|কীভাবে)(?:\s+আছ(?:ো)?)?(?=\s*[?？।!]|$)",
+        "তুমি কেমন আছ",
+        output,
+    )
+    output = re.sub(r"\bআমি\s+ঠিক\s+আছে\b", "আমি ঠিক আছি", output)
+    output = re.sub(r"\bআমি\s+ভালো\s+আছে\b", "আমি ভালো আছি", output)
+    output = re.sub(r"\bআমরা\s+ঠিক\s+আছে\b", "আমরা ঠিক আছি", output)
+    output = re.sub(r"\bআমরা\s+ভালো\s+আছে\b", "আমরা ভালো আছি", output)
+    return output
+
+
 def _valid_target_script(source: str, translated: str, target: str) -> bool:
     clean = " ".join(str(translated).split()).strip()
     if not clean or len(clean) > 5_000 or "<html" in clean.casefold():
@@ -329,6 +354,7 @@ def translate_voice_segments(
             for local_index, output in enumerate(outputs):
                 source_text = batch[local_index]
                 output = _preserve_greeting(source_text, output, target)
+                output = _normalize_target_fluency(output, target)
                 if target == "en":
                     output = _title_case_latin_words(output)
                 translated.append(output)
@@ -483,6 +509,7 @@ def translate_segments(
                     batch[local_index], candidates, candidate_backs
                 )
                 output = _preserve_greeting(batch[local_index], chosen, target)
+                output = _normalize_target_fluency(output, target)
                 if not _valid_target_script(batch[local_index], output, target):
                     raise TranslationError(
                         "Offline Translation-এর একটি বাক্য সঠিক ভাষায় তৈরি হয়নি।"
