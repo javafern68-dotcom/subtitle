@@ -38,6 +38,7 @@ from bangla_subtitle_studio.voice_translate import (
 from bangla_subtitle_studio.translation import (
     _google_translate_text,
     _google_translate_texts,
+    _ensure_runtime_streams,
     _preserve_greeting,
     _select_semantic_candidate,
     _valid_target_script,
@@ -224,6 +225,17 @@ class OfflineTranscriptionTests(unittest.TestCase):
 
 
 class TranslationAndSyncTests(unittest.TestCase):
+    def test_windowed_exe_has_safe_utf8_library_log_streams(self) -> None:
+        with (
+            mock.patch.object(sys, "stdout", None),
+            mock.patch.object(sys, "stderr", None),
+        ):
+            _ensure_runtime_streams()
+            self.assertIsNotNone(sys.stdout)
+            self.assertIsNotNone(sys.stderr)
+            assert sys.stdout is not None
+            sys.stdout.write("বাংলা हिंदी English")
+
     def test_all_requested_voice_directions_require_the_correct_script(self) -> None:
         directions = [
             ("বাংলা কথা", "How Are You", "en"),

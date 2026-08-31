@@ -22,6 +22,7 @@ class TranslationError(RuntimeError):
 
 TranslationProgress = Callable[[float, str], None]
 TRANSLATION_MODEL_DIR = "m2m100-418M-int8"
+_RUNTIME_STREAMS: list[object] = []
 _BANGLA_GREETING_RE = re.compile(
     r"আস+সালামু[য়য়]?[া ]*আলাইকুম|আসসালামু\s+আলাইকুম",
     re.IGNORECASE,
@@ -92,6 +93,15 @@ def translation_model_path() -> str:
     raise TranslationError(
         "Offline ভাষা Translation model পাওয়া যায়নি। Multilanguage installer আবার Install করুন।"
     )
+
+
+def _ensure_runtime_streams() -> None:
+    """Give windowed PyInstaller builds UTF-8 sinks for library log messages."""
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name, None) is None:
+            stream = open(os.devnull, "w", encoding="utf-8", errors="replace")
+            _RUNTIME_STREAMS.append(stream)
+            setattr(sys, name, stream)
 
 
 def shift_segments_earlier(
@@ -375,6 +385,8 @@ def translate_segments(
 
     model_dir = translation_model_path()
     try:
+        os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+        _ensure_runtime_streams()
         import ctranslate2
         from transformers import M2M100Tokenizer
 
