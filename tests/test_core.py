@@ -30,6 +30,8 @@ from bangla_subtitle_studio.transcription import (
 )
 from bangla_subtitle_studio.voice_translate import (
     _atempo_expression,
+    _online_voice,
+    _save_speech,
     _select_voice,
     create_voice_translated_video,
 )
@@ -341,6 +343,43 @@ class VoiceTranslationTests(unittest.TestCase):
             _atempo_expression(4.5),
             "atempo=2.00000,atempo=2.00000,atempo=1.12500",
         )
+
+    def test_google_bengali_voice_is_used_when_microsoft_is_unreachable(self) -> None:
+        edge_module = types.ModuleType("edge_tts")
+
+        async def failed_voice_list() -> list[dict[str, object]]:
+            raise OSError("Microsoft service blocked")
+
+        edge_module.list_voices = failed_voice_list  # type: ignore[attr-defined]
+        gtts_package = types.ModuleType("gtts")
+        gtts_package.__path__ = []  # type: ignore[attr-defined]
+        gtts_lang = types.ModuleType("gtts.lang")
+        gtts_lang.tts_langs = lambda: {"bn": "Bengali"}  # type: ignore[attr-defined]
+        with (
+            mock.patch.dict(
+                sys.modules,
+                {"edge_tts": edge_module, "gtts": gtts_package, "gtts.lang": gtts_lang},
+            ),
+            mock.patch("bangla_subtitle_studio.voice_translate.time.sleep"),
+        ):
+            self.assertEqual(_online_voice("bn", "Female"), "google:bn")
+
+    def test_google_fallback_writes_real_audio_file(self) -> None:
+        gtts_package = types.ModuleType("gtts")
+
+        class FakeGoogleSpeech:
+            def __init__(self, text: str, lang: str, slow: bool) -> None:
+                self.values = (text, lang, slow)
+
+            def save(self, output_path: str) -> None:
+                Path(output_path).write_bytes(b"google voice")
+
+        gtts_package.gTTS = FakeGoogleSpeech  # type: ignore[attr-defined]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "fallback.mp3"
+            with mock.patch.dict(sys.modules, {"gtts": gtts_package}):
+                _save_speech("আপনি কেমন আছেন", "google:bn", str(output))
+            self.assertEqual(output.read_bytes(), b"google voice")
 
     @mock.patch("bangla_subtitle_studio.voice_translate._mux_dubbed_video")
     @mock.patch("bangla_subtitle_studio.voice_translate._build_timed_voice_track")

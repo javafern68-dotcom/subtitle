@@ -21,6 +21,7 @@ class VoiceTranslationError(RuntimeError):
 
 VoiceProgress = Callable[[float, str], None]
 VOICE_SAMPLE_RATE = 24_000
+_GOOGLE_VOICE_PREFIX = "google:"
 _PREFERRED_VOICES = {
     ("bn", "Female"): "bn-BD-NabanitaNeural",
     ("bn", "Male"): "bn-BD-PradeepNeural",
@@ -75,26 +76,56 @@ def _online_voice(language: str, gender: str) -> str:
 
             voices = asyncio.run(edge_tts.list_voices())
             return _select_voice(voices, language, gender)
-        except VoiceTranslationError:
-            raise
         except Exception as exc:
             last_error = exc
             if attempt == 0:
                 time.sleep(1.0)
-    raise VoiceTranslationError(
-        "Natural voice service-এ Internet connection হয়নি। Internet চালু করে আবার চেষ্টা করুন।"
-    ) from last_error
+    try:
+        from gtts.lang import tts_langs
+
+        if language not in tts_langs():
+            raise VoiceTranslationError(
+                "নির্বাচিত ভাষার Microsoft অথবা Google voice পাওয়া যায়নি।"
+            )
+        return f"{_GOOGLE_VOICE_PREFIX}{language}"
+    except VoiceTranslationError:
+        raise
+    except Exception as exc:
+        raise VoiceTranslationError(
+            "Microsoft ও Google—দুই Natural voice service প্রস্তুত করা যায়নি।"
+        ) from (last_error or exc)
+
+
+def _save_google_speech(text: str, language: str, output_path: str) -> None:
+    from gtts import gTTS
+
+    Path(output_path).unlink(missing_ok=True)
+    gTTS(text=text, lang=language, slow=False).save(output_path)
 
 
 def _save_speech(text: str, voice: str, output_path: str) -> None:
+    language = voice.removeprefix(_GOOGLE_VOICE_PREFIX).split("-", 1)[0].lower()
+    if voice.startswith(_GOOGLE_VOICE_PREFIX):
+        try:
+            _save_google_speech(text, language, output_path)
+            return
+        except Exception as exc:
+            raise VoiceTranslationError(
+                "Google fallback voice download হয়নি। Internet, VPN ও Firewall পরীক্ষা করুন।"
+            ) from exc
     try:
         import edge_tts
 
         edge_tts.Communicate(text=text, voice=voice).save_sync(output_path)
-    except Exception as exc:
-        raise VoiceTranslationError(
-            "Translated voice download হয়নি। Internet পরীক্ষা করে আবার চেষ্টা করুন।"
-        ) from exc
+        return
+    except Exception as edge_error:
+        try:
+            _save_google_speech(text, language, output_path)
+            return
+        except Exception as google_error:
+            raise VoiceTranslationError(
+                "Microsoft ও Google—দুই voice service-এই connection হয়নি। Internet, VPN ও Firewall পরীক্ষা করুন।"
+            ) from google_error
 
 
 def _probe_audio_duration(path: str) -> float:

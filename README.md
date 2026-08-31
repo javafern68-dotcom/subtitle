@@ -1,8 +1,16 @@
-# Bangla Subtitle Studio V3.0 Voice Translate
+# Bangla Subtitle Studio V3.0.1 Voice Fallback
 
 Windows desktop software for creating timed subtitles, translating spoken audio into a new natural-language voice, editing subtitle style, placing a logo, adjusting video color, and exporting a new MP4.
 
-## What changed in V3.0
+## V3.0.1 connection fix
+
+- If Microsoft Edge natural voice cannot connect, the software automatically switches to Google Text-to-Speech.
+- The fallback covers Bengali, Hindi, English, Arabic, Urdu and other supported Google voice languages without an API key or per-video charge.
+- If Edge voice synthesis fails after a voice was selected, each sentence is retried through Google automatically.
+- Google fallback uses its default voice; the male/female preference applies when the primary Microsoft voice is available.
+- The packaged application must create real Bengali fallback audio before the installer is released.
+
+## Voice Translate introduced in V3.0
 
 - Adds a separate Multilanguage Voice Translate / Dubbing tab.
 - Source and target voice languages are selected independently: Bengali, English, Hindi, Arabic, Urdu and the other existing languages are available.
@@ -34,7 +42,7 @@ Windows desktop software for creating timed subtitles, translating spoken audio 
 
 ## Features
 
-- No OpenAI API key, billing, account, or Internet connection is required.
+- Offline subtitles need no OpenAI API key, billing, account, or Internet connection; Voice Translate needs Internet for Microsoft or Google speech.
 - Transcription runs locally with `whisper.cpp` and a dedicated Bengali fine-tuned Whisper Medium Q4 model.
 - Accurate Bengali (`bn`) speech recognition remains permanently selected for the source audio.
 - Subtitle output can be Bengali Unicode, Avro/Banglish, Hindi, English, Arabic, Urdu, Nepali, Punjabi, Tamil, Telugu, Gujarati, Persian, Spanish, French, German, Italian, Portuguese, Russian, Turkish, Chinese, Japanese, or Korean.
@@ -50,7 +58,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe` from the `v3.0.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.exe` from the `v3.0.1` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 
@@ -66,6 +74,7 @@ The GitHub Actions workflow builds and bundles:
 - bundled Avro/Banglish reverse transliteration
 - real Bengali speech test that must produce Bengali Unicode text and a readable timed SRT
 - packaged Bengali greeting-to-Hindi and English semantic translation tests
+- packaged real Google Bengali fallback-audio test
 - packaged full Hindi-voice-to-Bengali-voice video test using an online natural target voice
 - Inno Setup installer and SHA-256 checksum
 

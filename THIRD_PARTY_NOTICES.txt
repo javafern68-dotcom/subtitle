@@ -39,6 +39,15 @@ identified MIT-licensed SRT composer.
 Voice Translate uses the online text-to-speech service exposed to Microsoft
 Edge. Internet access is required; no API key is requested by this software.
 
+gTTS Google Text-to-Speech fallback client
+Copyright (c) Pierre-Nick Durette and contributors
+Source: https://github.com/pndurette/gTTS
+License: MIT
+If the Microsoft voice service cannot be reached, Voice Translate automatically
+uses Google Translate text-to-speech. Internet access is required; no API key is
+requested by this software. The fallback service may use its default voice,
+regardless of the selected male/female preference.
+
 FFmpeg
 Source: https://ffmpeg.org/
 The bundled build is redistributed under the license terms supplied by its distributor.

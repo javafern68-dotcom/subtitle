@@ -119,11 +119,13 @@ jobs:
             --additional-hooks-dir "pyinstaller_hooks" `
             --collect-all avro `
             --collect-all edge_tts `
+            --collect-all gtts `
             --collect-all ctranslate2 `
             --collect-all sentencepiece `
             --collect-data transformers `
             --copy-metadata transformers `
             --copy-metadata edge-tts `
+            --copy-metadata gTTS `
             --hidden-import "transformers.models.m2m_100" `
             --hidden-import "transformers.models.m2m_100.tokenization_m2m_100" `
             --add-binary "tools\ffmpeg.exe;tools" `
@@ -182,6 +184,10 @@ jobs:
           $translationTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList "--translation-self-test" -Wait -PassThru
           if ($translationTest.ExitCode -ne 0) { throw "Packaged Hindi, English or Roman-only Avro self-test failed" }
           Write-Host "Verified packaged Hindi/English meaning and Roman-only Avro formatting"
+          $fallbackTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList @("--voice-fallback-self-test", "google-bengali-fallback.mp3") -Wait -PassThru
+          if ($fallbackTest.ExitCode -ne 0) { throw "Packaged Google Bengali voice fallback self-test failed" }
+          if (!(Test-Path "google-bengali-fallback.mp3")) { throw "Google Bengali fallback audio missing" }
+          Write-Host "Verified automatic Google Bengali voice fallback in packaged application"
           $env:PYTHONUTF8 = "1"
           @'
           from bangla_subtitle_studio.voice_translate import _online_voice, _save_speech
@@ -204,12 +210,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -217,30 +223,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v3.0.0"
+          $tag = "v3.0.1"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe" `
-              "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.exe" `
+              "installer\Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V3.0 Voice Translate" `
-              --notes "Adds a separate Multilanguage Voice Translate tab. Select the source voice language and target voice language to create Bengali, English, Hindi, Arabic, Urdu and other dubbed videos. A bundled multilingual Whisper model recognizes non-Bengali source speech, the existing offline M2M100 model meaning-checks the translation, and online natural male/female speech is fitted sentence-by-sentence to the original timing. Original audio volume is adjustable and translated text can be kept as ready subtitles for styling/export. The full Hindi-voice-to-Bengali-voice video pipeline is tested in the packaged Windows app. Natural voice generation requires Internet but no API key; all existing V2.6 subtitle, Roman-only Avro, Global Sync, logo, color and export features remain. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V3.0.1 Voice Fallback" `
+              --notes "Fixes Natural voice connection failures reported in V3.0. Microsoft Edge voice remains the first choice, but if that service is unavailable the software automatically switches to the bundled Google Bengali/Hindi/English/Arabic/Urdu voice fallback. Both providers require Internet but neither requires an API key or per-video payment. The packaged Windows application must create real Bengali fallback audio and pass the complete Hindi-voice-to-Bengali-voice video test before release. All V3.0 Voice Translate, offline subtitle, translation, Roman-only Avro, Global Sync, logo, color and export features remain. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe" `
-              "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.exe" `
+              "installer\Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Voice-Translate-Setup-V3.0
+          name: Bangla-Subtitle-Studio-Voice-Fallback-Setup-V3.0.1
           path: |
-            installer/Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe
-            installer/Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.sha256.txt
+            installer/Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.exe
+            installer/Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

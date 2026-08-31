@@ -7,7 +7,10 @@ from bangla_subtitle_studio.media import probe_video
 from bangla_subtitle_studio.models import SubtitleSegment
 from bangla_subtitle_studio.subtitles import parse_srt
 from bangla_subtitle_studio.translation import translate_segments
-from bangla_subtitle_studio.voice_translate import create_voice_translated_video
+from bangla_subtitle_studio.voice_translate import (
+    _save_speech,
+    create_voice_translated_video,
+)
 
 
 def translation_self_test() -> None:
@@ -75,6 +78,12 @@ def voice_translate_self_test(input_video: str, output_video: str) -> None:
         raise RuntimeError("Bengali dubbed video is empty")
 
 
+def voice_fallback_self_test(output_audio: str) -> None:
+    _save_speech("আপনি কেমন আছেন?", "google:bn", output_audio)
+    if not Path(output_audio).is_file() or Path(output_audio).stat().st_size < 1_000:
+        raise RuntimeError("Google Bengali fallback voice was not created")
+
+
 if __name__ == "__main__":
     if "--srt-self-test" in sys.argv:
         try:
@@ -94,6 +103,12 @@ if __name__ == "__main__":
                 sys.argv[option_index + 1],
                 sys.argv[option_index + 2],
             )
+        except Exception:
+            sys.exit(1)
+    elif "--voice-fallback-self-test" in sys.argv:
+        try:
+            option_index = sys.argv.index("--voice-fallback-self-test")
+            voice_fallback_self_test(sys.argv[option_index + 1])
         except Exception:
             sys.exit(1)
     else:
