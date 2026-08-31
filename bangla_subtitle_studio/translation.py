@@ -218,10 +218,10 @@ def _normalize_target_fluency(text: str, target: str) -> str:
         "তুমি কেমন আছ",
         output,
     )
-    output = re.sub(r"\bআমি\s+ঠিক\s+আছে\b", "আমি ঠিক আছি", output)
-    output = re.sub(r"\bআমি\s+ভালো\s+আছে\b", "আমি ভালো আছি", output)
-    output = re.sub(r"\bআমরা\s+ঠিক\s+আছে\b", "আমরা ঠিক আছি", output)
-    output = re.sub(r"\bআমরা\s+ভালো\s+আছে\b", "আমরা ভালো আছি", output)
+    output = re.sub(r"আমি\s+ঠিক\s+আছে", "আমি ঠিক আছি", output)
+    output = re.sub(r"আমি\s+ভালো\s+আছে", "আমি ভালো আছি", output)
+    output = re.sub(r"আমরা\s+ঠিক\s+আছে", "আমরা ঠিক আছি", output)
+    output = re.sub(r"আমরা\s+ভালো\s+আছে", "আমরা ভালো আছি", output)
     return output
 
 
