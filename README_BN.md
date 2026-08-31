@@ -1,4 +1,18 @@
-# Bangla Subtitle Studio V3.0.1 — Automatic Voice Fallback
+# Bangla Subtitle Studio V3.1 — Accurate Voice Translate
+
+## V3.1-এ সঠিক অনুবাদ ও গতি
+
+- বাংলা voice → English voice
+- English voice → বাংলা voice
+- বাংলা voice → Hindi voice
+- Hindi voice → বাংলা voice
+- Hindi voice → English voice
+- English voice → Hindi voice
+- Voice Translate-এ এখন সম্পূর্ণ বাক্য ধরে Accurate Online Google translation আগে ব্যবহার হবে।
+- অনুবাদের লেখা নির্বাচিত ভাষার সঠিক অক্ষরে না এলে software সেটি গ্রহণ করবে না।
+- Online translation না চললে installer-এর Offline AI model নিজে চালু হবে।
+- Hindi ও English মূল voice আরও সঠিক ধরতে Whisper Small-এর বদলে উন্নত Whisper Large V3 Turbo Q5_0 যুক্ত হয়েছে।
+- সাধারণভাবে বড় Offline translation model চালু করতে হবে না, তাই আগের ৫০% translation ধাপ অনেক দ্রুত হবে।
 
 ## V3.0.1-এ connection সমস্যার সমাধান
 
@@ -49,12 +63,12 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V3.0.1 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V3.1 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Voice Translate করার নিয়ম
 
@@ -78,7 +92,7 @@
 ৭. তৈরি হওয়া কোনো লাইনে double-click করে লেখা বা সময় ঠিক করুন।
 ৮. পুরো subtitle দেরিতে এলে `Global Sync` থেকে `আগে`, আর বেশি আগে এলে `পরে` চাপুন। এটি বাংলা, Avro, English, Hindi—সব ভাষাতেই কাজ করবে।
 
-Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V3.0.1-তে বাংলা speech-এর জন্য V2.2-এর Bengali Medium model এবং অন্য source ভাষার জন্য Multilingual Whisper Small model ব্যবহার করা হয়েছে, তাই processing-এ সময় লাগতে পারে। বাংলা Unicode ও Avro সবচেয়ে দ্রুত; অন্য ভাষায় অর্থ যাচাই করার জন্য Translation-এ অতিরিক্ত সময় লাগবে। কাজ চলার সময় নিচের live সময় বাড়লে software কাজ করছে।
+Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V3.1-তে বাংলা speech-এর জন্য V2.2-এর Bengali Medium model এবং অন্য source ভাষার জন্য Multilingual Whisper Large V3 Turbo model ব্যবহার করা হয়েছে। Voice Translate-এর Online translation সাধারণভাবে দ্রুত; সেটি না চললে Offline fallback-এ অতিরিক্ত সময় লাগবে। কাজ চলার সময় নিচের live সময় বাড়লে software কাজ করছে।
 
 ## Subtitle Style
 
@@ -123,8 +137,8 @@ Manual controls: Brightness, Contrast, Saturation, Temperature ও Tint।
 - `Offline বাংলা AI model পাওয়া যায়নি`: V2 Offline installer আবার install করুন।
 - কাজ ধীরে হচ্ছে: নিচের “কাজ চলছে” সময় বাড়ছে কি না দেখুন, অন্য ভারী software বন্ধ করুন এবং কাজ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।
 - `পর্যাপ্ত RAM` বার্তা: অন্য software বন্ধ করে আবার চেষ্টা করুন।
-- `Offline subtitle পড়া যায়নি`: V3.0.1 আবার install করুন; SRT reader fix এই সংস্করণেও আছে।
-- Microsoft Natural Voice connection না হলে V3.0.1 নিজে Google Voice ব্যবহার করবে। দুই service-ই ব্যর্থ হলে VPN বন্ধ করে Windows Firewall/Antivirus-এ software-কে Internet access দিন।
+- `Offline subtitle পড়া যায়নি`: V3.1 আবার install করুন; SRT reader fix এই সংস্করণেও আছে।
+- Microsoft Natural Voice connection না হলে V3.1 নিজে Google Voice ব্যবহার করবে। দুই service-ই ব্যর্থ হলে VPN বন্ধ করে Windows Firewall/Antivirus-এ software-কে Internet access দিন।
 - বাংলা অক্ষর box দেখায়: Windows Settings থেকে Bengali language/font support install করুন।
 - কথা ভুল লিখেছে: background music কমানো বা পরিষ্কার audio ব্যবহার করা ভালো; ভুল line-এ double-click করে সংশোধন করুন।
 

@@ -36,8 +36,10 @@ from bangla_subtitle_studio.voice_translate import (
     create_voice_translated_video,
 )
 from bangla_subtitle_studio.translation import (
+    _google_translate_text,
     _preserve_greeting,
     _select_semantic_candidate,
+    _valid_target_script,
     _format_avro_text,
     _title_case_latin_words,
     shift_segments,
@@ -193,7 +195,7 @@ class OfflineTranscriptionTests(unittest.TestCase):
             force_bengali=False,
         )
         self.assertEqual(command[command.index("-l") + 1], "hi")
-        self.assertEqual(MULTILINGUAL_MODEL_NAME, "ggml-small-q5_1.bin")
+        self.assertEqual(MULTILINGUAL_MODEL_NAME, "ggml-large-v3-turbo-q5_0.bin")
 
     def test_live_progress_output_is_detected(self) -> None:
         output = b"whisper_print_progress_callback: progress =  42%\r"
@@ -221,6 +223,35 @@ class OfflineTranscriptionTests(unittest.TestCase):
 
 
 class TranslationAndSyncTests(unittest.TestCase):
+    def test_all_requested_voice_directions_require_the_correct_script(self) -> None:
+        directions = [
+            ("বাংলা কথা", "How Are You", "en"),
+            ("English speech", "আপনি কেমন আছেন", "bn"),
+            ("বাংলা কথা", "आप कैसे हैं", "hi"),
+            ("हिंदी आवाज", "আপনি কেমন আছেন", "bn"),
+            ("हिंदी आवाज", "How Are You", "en"),
+            ("English speech", "आप कैसे हैं", "hi"),
+        ]
+        for source, translated, target in directions:
+            with self.subTest(target=target, translated=translated):
+                self.assertTrue(_valid_target_script(source, translated, target))
+
+    @mock.patch("bangla_subtitle_studio.translation.urllib.request.urlopen")
+    def test_google_translation_response_is_parsed_and_validated(
+        self, urlopen: mock.Mock
+    ) -> None:
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(
+            [[["How are you?", "আপনি কেমন আছেন?", None, None]]]
+        ).encode("utf-8")
+        urlopen.return_value = response
+        self.assertEqual(
+            _google_translate_text("আপনি কেমন আছেন?", "bn", "en"),
+            "How are you?",
+        )
+        self.assertIn("sl=bn", urlopen.call_args.args[0].full_url)
+        self.assertIn("tl=en", urlopen.call_args.args[0].full_url)
+
     def test_semantic_reranking_prefers_meaning_preserving_translation(self) -> None:
         chosen = _select_semantic_candidate(
             "সবাই কেমন আছেন",
@@ -384,7 +415,7 @@ class VoiceTranslationTests(unittest.TestCase):
     @mock.patch("bangla_subtitle_studio.voice_translate._mux_dubbed_video")
     @mock.patch("bangla_subtitle_studio.voice_translate._build_timed_voice_track")
     @mock.patch("bangla_subtitle_studio.voice_translate._online_voice", return_value="en-US-JennyNeural")
-    @mock.patch("bangla_subtitle_studio.voice_translate.translate_segments")
+    @mock.patch("bangla_subtitle_studio.voice_translate.translate_voice_segments")
     @mock.patch("bangla_subtitle_studio.voice_translate.transcribe_video")
     def test_hindi_voice_can_become_english_voice(
         self,

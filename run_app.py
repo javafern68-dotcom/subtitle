@@ -6,7 +6,11 @@ from bangla_subtitle_studio.app import main
 from bangla_subtitle_studio.media import probe_video
 from bangla_subtitle_studio.models import SubtitleSegment
 from bangla_subtitle_studio.subtitles import parse_srt
-from bangla_subtitle_studio.translation import translate_segments
+from bangla_subtitle_studio.translation import (
+    _google_translate_text,
+    _valid_target_script,
+    translate_segments,
+)
 from bangla_subtitle_studio.voice_translate import (
     _save_speech,
     create_voice_translated_video,
@@ -84,6 +88,23 @@ def voice_fallback_self_test(output_audio: str) -> None:
         raise RuntimeError("Google Bengali fallback voice was not created")
 
 
+def accurate_translation_self_test() -> None:
+    directions = [
+        ("bn", "en", "আপনি কেমন আছেন?", re.compile(r"\bhow\b|\byou\b", re.I)),
+        ("en", "bn", "How are you?", re.compile(r"আপনি|কেমন")),
+        ("bn", "hi", "আপনি কেমন আছেন?", re.compile(r"आप|कैसे")),
+        ("hi", "bn", "आप कैसे हैं?", re.compile(r"আপনি|কেমন")),
+        ("hi", "en", "आप कैसे हैं?", re.compile(r"\bhow\b|\byou\b", re.I)),
+        ("en", "hi", "How are you?", re.compile(r"आप|कैसे")),
+    ]
+    for source, target, text, meaning in directions:
+        translated = _google_translate_text(text, source, target)
+        if not _valid_target_script(text, translated, target) or not meaning.search(translated):
+            raise RuntimeError(
+                f"Accurate {source}-to-{target} translation failed: {translated}"
+            )
+
+
 if __name__ == "__main__":
     if "--srt-self-test" in sys.argv:
         try:
@@ -109,6 +130,11 @@ if __name__ == "__main__":
         try:
             option_index = sys.argv.index("--voice-fallback-self-test")
             voice_fallback_self_test(sys.argv[option_index + 1])
+        except Exception:
+            sys.exit(1)
+    elif "--accurate-translation-self-test" in sys.argv:
+        try:
+            accurate_translation_self_test()
         except Exception:
             sys.exit(1)
     else:

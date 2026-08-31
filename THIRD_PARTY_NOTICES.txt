@@ -48,6 +48,12 @@ uses Google Translate text-to-speech. Internet access is required; no API key is
 requested by this software. The fallback service may use its default voice,
 regardless of the selected male/female preference.
 
+Google Translate web translation fallback
+Voice Translate can send already transcribed sentence text to Google Translate
+for higher-accuracy, faster cross-language translation. No API key is requested
+by this software. If that online request is unavailable or returns text in the
+wrong writing system, the bundled Offline M2M100 model is used automatically.
+
 FFmpeg
 Source: https://ffmpeg.org/
 The bundled build is redistributed under the license terms supplied by its distributor.

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import os
+import html
+import json
 import re
 import sys
 import threading
+import time
+import urllib.parse
+import urllib.request
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Callable
@@ -22,11 +27,39 @@ _BANGLA_GREETING_RE = re.compile(
     re.IGNORECASE,
 )
 _TARGET_GREETINGS = {
+    "bn": "আসসালামু আলাইকুম",
     "en": "Assalamu Alaikum",
     "hi": "अस्सलामु अलैकुम",
     "ar": "السلام عليكم",
     "ur": "السلام علیکم",
 }
+_ANY_GREETING_RE = re.compile(
+    r"আস+সালামু[য়য়]?[া ]*আলাইকুম|আসসালামু\s+আলাইকুম|"
+    r"ass?alamu\s+alaikum|अस्स?लामु\s+अलैकुम|السلام\s+عليكم",
+    re.IGNORECASE,
+)
+_TARGET_SCRIPT_PATTERNS = {
+    "bn": re.compile(r"[\u0980-\u09FF]"),
+    "hi": re.compile(r"[\u0900-\u097F]"),
+    "ne": re.compile(r"[\u0900-\u097F]"),
+    "pa": re.compile(r"[\u0A00-\u0A7F]"),
+    "ta": re.compile(r"[\u0B80-\u0BFF]"),
+    "te": re.compile(r"[\u0C00-\u0C7F]"),
+    "gu": re.compile(r"[\u0A80-\u0AFF]"),
+    "ar": re.compile(r"[\u0600-\u06FF]"),
+    "ur": re.compile(r"[\u0600-\u06FF]"),
+    "fa": re.compile(r"[\u0600-\u06FF]"),
+    "ru": re.compile(r"[\u0400-\u04FF]"),
+    "zh": re.compile(r"[\u3400-\u9FFF]"),
+    "ja": re.compile(r"[\u3040-\u30FF\u3400-\u9FFF]"),
+    "ko": re.compile(r"[\uAC00-\uD7AF]"),
+    "en": re.compile(r"[A-Za-z]"),
+}
+_GOOGLE_LANGUAGE_CODES = {"zh": "zh-CN"}
+_GOOGLE_TRANSLATE_ENDPOINTS = (
+    "https://translate.googleapis.com/translate_a/single",
+    "https://translate.google.com/translate_a/single",
+)
 _AVRO_BISMILLAH_RE = re.compile(
     r"^\s*বিসমিল্লাহির?\s+র[া]?হমান(?:ির|ের)\s+রাহিম",
     re.IGNORECASE,
@@ -141,7 +174,7 @@ def _select_semantic_candidate(
 
 
 def _preserve_greeting(source: str, translated: str, target: str) -> str:
-    if not _BANGLA_GREETING_RE.search(source):
+    if not _ANY_GREETING_RE.search(source):
         return translated.strip()
     greeting = _TARGET_GREETINGS.get(target, "Assalamu Alaikum")
     lowered = translated.casefold()
@@ -155,6 +188,105 @@ def _preserve_greeting(source: str, translated: str, target: str) -> str:
         return translated.strip()
     rest = translated.strip()
     return greeting + ("। " + rest if rest else "")
+
+
+def _valid_target_script(source: str, translated: str, target: str) -> bool:
+    clean = " ".join(str(translated).split()).strip()
+    if not clean or len(clean) > 5_000 or "<html" in clean.casefold():
+        return False
+    pattern = _TARGET_SCRIPT_PATTERNS.get(target)
+    if pattern and not pattern.search(clean):
+        return False
+    return _comparison_text(clean) != _comparison_text(source)
+
+
+def _google_translate_text(text: str, source: str, target: str) -> str:
+    parameters = {
+        "client": "gtx",
+        "sl": _GOOGLE_LANGUAGE_CODES.get(source, source),
+        "tl": _GOOGLE_LANGUAGE_CODES.get(target, target),
+        "dt": "t",
+        "q": text,
+    }
+    last_error: Exception | None = None
+    for endpoint in _GOOGLE_TRANSLATE_ENDPOINTS:
+        for attempt in range(2):
+            try:
+                request = urllib.request.Request(
+                    endpoint + "?" + urllib.parse.urlencode(parameters),
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 Chrome/151 Safari/537.36"
+                        )
+                    },
+                )
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                translated = "".join(
+                    str(part[0])
+                    for part in (payload[0] if payload and payload[0] else [])
+                    if part and part[0]
+                )
+                translated = html.unescape(translated).strip()
+                if _valid_target_script(text, translated, target):
+                    return translated
+                raise TranslationError("Online translation-এর ভাষার অক্ষর সঠিক হয়নি।")
+            except Exception as exc:
+                last_error = exc
+                if attempt == 0:
+                    time.sleep(0.5)
+    raise TranslationError("Online Accurate translation service পাওয়া যায়নি।") from last_error
+
+
+def translate_voice_segments(
+    segments: list[SubtitleSegment],
+    target_language: str,
+    progress: TranslationProgress | None = None,
+    cancel_event: threading.Event | None = None,
+    source_language: str = "bn",
+) -> list[SubtitleSegment]:
+    """Use fast high-quality online translation, with the bundled model as fallback."""
+    target = target_language.strip().lower()
+    source = source_language.strip().lower()
+    if target == source:
+        return [SubtitleSegment(item.start, item.end, item.text, "") for item in segments]
+    if progress:
+        progress(0.02, "Accurate Online Translation প্রস্তুত হচ্ছে…")
+    translated: list[str] = []
+    try:
+        for index, item in enumerate(segments):
+            if cancel_event and cancel_event.is_set():
+                raise TranslationError("Voice Translation বাতিল করা হয়েছে।")
+            output = _google_translate_text(item.text.strip(), source, target)
+            output = _preserve_greeting(item.text, output, target)
+            if target == "en":
+                output = _title_case_latin_words(output)
+            translated.append(output)
+            if progress:
+                progress(
+                    (index + 1) / max(1, len(segments)),
+                    f"Accurate Online Translation—{index + 1}/{len(segments)} বাক্য",
+                )
+        return [
+            SubtitleSegment(item.start, item.end, translated[index], item.text)
+            for index, item in enumerate(segments)
+        ]
+    except TranslationError:
+        if progress:
+            progress(0.05, "Online Translation পাওয়া যায়নি—Offline AI fallback চলছে…")
+
+        def offline_progress(value: float, message: str) -> None:
+            if progress:
+                progress(0.05 + value * 0.95, message)
+
+        return translate_segments(
+            segments,
+            target,
+            offline_progress,
+            cancel_event,
+            source_language=source,
+        )
 
 
 def _decode_hypothesis(tokenizer: object, tokens: list[str], prefix: str) -> str:

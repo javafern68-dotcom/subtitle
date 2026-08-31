@@ -1,4 +1,13 @@
-# Bangla Subtitle Studio V3.0.1 Voice Fallback
+# Bangla Subtitle Studio V3.1 Accurate Voice
+
+## V3.1 accuracy and speed update
+
+- Bengali-to-English, English-to-Bengali, Bengali-to-Hindi, Hindi-to-Bengali, Hindi-to-English, and English-to-Hindi Voice Translate use sentence-level Google translation first.
+- Every online result is checked for the target writing system; invalid text is rejected automatically.
+- The bundled Offline M2M100 model remains an automatic fallback, so an online translation failure does not stop the job.
+- Non-Bengali source recognition is upgraded from Whisper Small to verified Whisper Large V3 Turbo Q5_0 for more faithful Hindi and English speech-to-text.
+- Adjacent voice fragments are joined into complete sentences before translation, preserving context.
+- Online translation avoids loading the large Offline translation model in the normal path, making the 34–56% stage much faster.
 
 Windows desktop software for creating timed subtitles, translating spoken audio into a new natural-language voice, editing subtitle style, placing a logo, adjusting video color, and exporting a new MP4.
 
@@ -58,7 +67,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Voice_Fallback_Setup_V3.0.1.exe` from the `v3.0.1` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.exe` from the `v3.1.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 
@@ -68,12 +77,13 @@ The GitHub Actions workflow builds and bundles:
 - FFmpeg, FFprobe, and FFplay
 - statically built `whisper.cpp` CLI
 - verified `ggml-bengali-medium-q4_0.bin` Bengali fine-tuned model
-- verified `ggml-small-q5_1.bin` multilingual source-speech model
+- verified `ggml-large-v3-turbo-q5_0.bin` multilingual source-speech model
 - verified Silero V6.2 Voice Activity Detection model
 - bundled INT8 M2M100 translation model covering 100 languages
 - bundled Avro/Banglish reverse transliteration
 - real Bengali speech test that must produce Bengali Unicode text and a readable timed SRT
 - packaged Bengali greeting-to-Hindi and English semantic translation tests
+- packaged six-direction Bengali/English/Hindi accurate translation test
 - packaged real Google Bengali fallback-audio test
 - packaged full Hindi-voice-to-Bengali-voice video test using an online natural target voice
 - Inno Setup installer and SHA-256 checksum

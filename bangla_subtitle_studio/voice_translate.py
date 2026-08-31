@@ -12,7 +12,8 @@ from typing import Callable
 from .media import _startupinfo, bundled_tool
 from .models import SubtitleSegment
 from .transcription import transcribe_video
-from .translation import translate_segments
+from .subtitles import merge_short_segments
+from .translation import translate_voice_segments
 
 
 class VoiceTranslationError(RuntimeError):
@@ -423,12 +424,19 @@ def create_voice_translated_video(
         cancel_event,
         multilingual=True,
     )
+    source_segments = merge_short_segments(
+        source_segments,
+        max_words=20,
+        max_chars=150,
+        max_duration=12.0,
+        max_gap=0.70,
+    )
 
     def translation_progress(value: float, message: str) -> None:
         if progress:
             progress(0.34 + value * 0.22, message)
 
-    translated = translate_segments(
+    translated = translate_voice_segments(
         source_segments,
         target,
         translation_progress,

@@ -23,7 +23,7 @@ from .voice_translate import create_voice_translated_video
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "3.0.1"
+APP_VERSION = "3.1.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -354,7 +354,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 8))
         ttk.Label(
             language_card,
-            text="Microsoft না চললে Google voice নিজে চালু হবে • API key বা প্রতি ভিডিওর টাকা নেই",
+            text="Accurate Online Translation + Offline fallback • কোনো API key বা প্রতি ভিডিওর টাকা নেই",
             foreground="#65E6A3",
             background="#1B2940",
             font=("Nirmala UI", 9, "bold"),
