@@ -192,12 +192,17 @@ jobs:
           @'
           from bangla_subtitle_studio.voice_translate import _online_voice, _save_speech
           voice = _online_voice("hi", "Female")
-          _save_speech("\u0906\u092a \u0915\u0948\u0938\u0947 \u0939\u0948\u0902?", voice, "hindi-voice-smoke.mp3")
+          _save_speech("\u0906\u092a \u0915\u0948\u0938\u0947 \u0939\u0948\u0902? \u092e\u0948\u0902 \u0920\u0940\u0915 \u0939\u0942\u0901\u0964 \u0906\u091c \u090f\u0915 \u092c\u0939\u0941\u0924 \u0905\u091a\u094d\u091b\u093e \u0926\u093f\u0928 \u0939\u0948\u0964", voice, "hindi-voice-smoke.mp3")
           '@ | python -
           & "$app\_internal\tools\ffmpeg.exe" -y -hide_banner -loglevel error -f lavfi -i "color=c=0x14213d:s=640x360:r=25" -i "hindi-voice-smoke.mp3" -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest "hindi-voice-smoke.mp4"
           if ($LASTEXITCODE -ne 0) { throw "Hindi source voice video creation failed" }
           $voiceTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList @("--voice-translate-self-test", "hindi-voice-smoke.mp4", "bengali-dub-smoke.mp4") -Wait -PassThru
-          if ($voiceTest.ExitCode -ne 0) { throw "Packaged Hindi-to-Bengali Voice Translate self-test failed" }
+          if ($voiceTest.ExitCode -ne 0) {
+            if (Test-Path "bengali-dub-smoke.mp4.test.log") {
+              Get-Content "bengali-dub-smoke.mp4.test.log" -Raw -Encoding UTF8
+            }
+            throw "Packaged Hindi-to-Bengali Voice Translate self-test failed"
+          }
           if (!(Test-Path "bengali-dub-smoke.mp4")) { throw "Bengali dubbed smoke video missing" }
           Write-Host "Verified full Hindi voice to Bengali voice video pipeline"
           Get-ChildItem $app -Recurse | Measure-Object -Property Length -Sum

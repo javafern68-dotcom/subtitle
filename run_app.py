@@ -1,5 +1,6 @@
 import re
 import sys
+import traceback
 from pathlib import Path
 
 from bangla_subtitle_studio.app import main
@@ -59,23 +60,40 @@ def srt_self_test(path: str) -> None:
 
 
 def voice_translate_self_test(input_video: str, output_video: str) -> None:
-    info = probe_video(input_video)
-    segments = create_voice_translated_video(
-        input_video,
-        float(info["duration"]),
-        "hi",
-        "bn",
-        "Female",
-        output_video,
-    )
-    text = " ".join(item.text for item in segments)
-    if not segments or not re.search(r"[\u0980-\u09FF]", text):
-        raise RuntimeError(f"Hindi voice did not become Bengali text/voice: {text}")
-    if not Path(output_video).is_file() or Path(output_video).stat().st_size < 10_000:
-        raise RuntimeError("Bengali dubbed video was not created")
-    output_info = probe_video(output_video)
-    if float(output_info["duration"]) < 0.5:
-        raise RuntimeError("Bengali dubbed video is empty")
+    log_path = Path(output_video + ".test.log")
+    progress_lines: list[str] = []
+
+    def record_progress(value: float, message: str) -> None:
+        line = f"{value * 100:.1f}% {message}"
+        progress_lines.append(line)
+        log_path.write_text("\n".join(progress_lines), encoding="utf-8")
+
+    try:
+        info = probe_video(input_video)
+        segments = create_voice_translated_video(
+            input_video,
+            float(info["duration"]),
+            "hi",
+            "bn",
+            "Female",
+            output_video,
+            progress=record_progress,
+        )
+        text = " ".join(item.text for item in segments)
+        progress_lines.append(f"Translated text: {text}")
+        if not segments or not re.search(r"[\u0980-\u09FF]", text):
+            raise RuntimeError(f"Hindi voice did not become Bengali text/voice: {text}")
+        if not Path(output_video).is_file() or Path(output_video).stat().st_size < 10_000:
+            raise RuntimeError("Bengali dubbed video was not created")
+        output_info = probe_video(output_video)
+        if float(output_info["duration"]) < 0.5:
+            raise RuntimeError("Bengali dubbed video is empty")
+        progress_lines.append(f"Output duration: {output_info['duration']}")
+        log_path.write_text("\n".join(progress_lines), encoding="utf-8")
+    except Exception:
+        progress_lines.append(traceback.format_exc())
+        log_path.write_text("\n".join(progress_lines), encoding="utf-8")
+        raise
 
 
 def voice_fallback_self_test(output_audio: str) -> None:
