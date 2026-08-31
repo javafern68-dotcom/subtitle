@@ -10,7 +10,7 @@
 - English voice → Hindi voice
 - Voice Translate-এ এখন সম্পূর্ণ বাক্য ধরে Accurate Online Google translation আগে ব্যবহার হবে।
 - অনুবাদের লেখা নির্বাচিত ভাষার সঠিক অক্ষরে না এলে software সেটি গ্রহণ করবে না।
-- Online translation না চললে installer-এর Offline AI model নিজে চালু হবে।
+- Translation-এর ক্রম হবে Google → MyMemory → installer-এর Offline AI; একটি service না চললেও কাজ বন্ধ হবে না।
 - Hindi ও English মূল voice আরও সঠিক ধরতে Whisper Small-এর বদলে উন্নত Whisper Large V3 Turbo Q5_0 যুক্ত হয়েছে।
 - সাধারণভাবে বড় Offline translation model চালু করতে হবে না, তাই আগের ৫০% translation ধাপ অনেক দ্রুত হবে।
 

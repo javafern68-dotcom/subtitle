@@ -7,7 +7,7 @@ from bangla_subtitle_studio.media import probe_video
 from bangla_subtitle_studio.models import SubtitleSegment
 from bangla_subtitle_studio.subtitles import parse_srt
 from bangla_subtitle_studio.translation import (
-    _google_translate_text,
+    _accurate_online_translate_text,
     _valid_target_script,
     translate_segments,
 )
@@ -98,7 +98,7 @@ def accurate_translation_self_test() -> None:
         ("en", "hi", "How are you?", re.compile(r"आप|कैसे")),
     ]
     for source, target, text, meaning in directions:
-        translated = _google_translate_text(text, source, target)
+        translated = _accurate_online_translate_text(text, source, target)
         if not _valid_target_script(text, translated, target) or not meaning.search(translated):
             raise RuntimeError(
                 f"Accurate {source}-to-{target} translation failed: {translated}"

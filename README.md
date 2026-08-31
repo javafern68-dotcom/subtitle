@@ -4,7 +4,7 @@
 
 - Bengali-to-English, English-to-Bengali, Bengali-to-Hindi, Hindi-to-Bengali, Hindi-to-English, and English-to-Hindi Voice Translate use sentence-level Google translation first.
 - Every online result is checked for the target writing system; invalid text is rejected automatically.
-- The bundled Offline M2M100 model remains an automatic fallback, so an online translation failure does not stop the job.
+- The order is Google → MyMemory → bundled Offline M2M100, so one unavailable service does not stop the job.
 - Non-Bengali source recognition is upgraded from Whisper Small to verified Whisper Large V3 Turbo Q5_0 for more faithful Hindi and English speech-to-text.
 - Adjacent voice fragments are joined into complete sentences before translation, preserving context.
 - Online translation avoids loading the large Offline translation model in the normal path, making the 34–56% stage much faster.

@@ -25,6 +25,28 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Verify six-direction Accurate Online Translation service
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:PYTHONUTF8 = "1"
+          @'
+          from bangla_subtitle_studio.translation import _accurate_online_translate_text, _valid_target_script
+          directions = [
+              ("bn", "en", "আপনি কেমন আছেন?"),
+              ("en", "bn", "How are you?"),
+              ("bn", "hi", "আপনি কেমন আছেন?"),
+              ("hi", "bn", "आप कैसे हैं?"),
+              ("hi", "en", "आप कैसे हैं?"),
+              ("en", "hi", "How are you?"),
+          ]
+          for source, target, value in directions:
+              translated = _accurate_online_translate_text(value, source, target)
+              if not _valid_target_script(value, translated, target):
+                  raise RuntimeError(f"Invalid {source}->{target}: {translated}")
+              print(f"Verified {source}->{target}: {translated}")
+          '@ | python -
+
       - name: Install build dependencies
         shell: pwsh
         run: |
@@ -234,7 +256,7 @@ jobs:
               "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.sha256.txt" `
               --target "${{ github.sha }}" `
               --title "Bangla Subtitle Studio V3.1 Accurate Voice" `
-              --notes "Accuracy-first Voice Translate update. Bengali-to-English, English-to-Bengali, Bengali-to-Hindi, Hindi-to-Bengali, Hindi-to-English and English-to-Hindi now use fast sentence-level Google translation first, validate the target writing system, and automatically fall back to the bundled Offline AI if the online translation service is unavailable. Non-Bengali source speech recognition is upgraded from Whisper Small to verified Whisper Large V3 Turbo Q5_0. Adjacent fragments are joined into complete sentences before translation. No API key or per-video charge. Microsoft natural voice and automatic Google voice fallback remain. The packaged Windows app must pass all six translation directions, real Google Bengali voice generation, and full Hindi-voice-to-Bengali-voice video tests before release. Installs over earlier versions without uninstalling."
+              --notes "Accuracy-first Voice Translate update. Bengali-to-English, English-to-Bengali, Bengali-to-Hindi, Hindi-to-Bengali, Hindi-to-English and English-to-Hindi now translate complete sentences through Google first, MyMemory second, and the bundled Offline AI third. Every result is validated for the target writing system. Non-Bengali source speech recognition is upgraded from Whisper Small to verified Whisper Large V3 Turbo Q5_0. Adjacent fragments are joined into complete sentences before translation. No API key or per-video charge. Microsoft natural voice and automatic Google voice fallback remain. The packaged Windows app must pass all six translation directions, real Google Bengali voice generation, and full Hindi-voice-to-Bengali-voice video tests before release. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `

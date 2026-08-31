@@ -60,6 +60,7 @@ _GOOGLE_TRANSLATE_ENDPOINTS = (
     "https://translate.googleapis.com/translate_a/single",
     "https://translate.google.com/translate_a/single",
 )
+_MYMEMORY_TRANSLATE_ENDPOINT = "https://api.mymemory.translated.net/get"
 _AVRO_BISMILLAH_RE = re.compile(
     r"^\s*বিসমিল্লাহির?\s+র[া]?হমান(?:ির|ের)\s+রাহিম",
     re.IGNORECASE,
@@ -239,6 +240,48 @@ def _google_translate_text(text: str, source: str, target: str) -> str:
     raise TranslationError("Online Accurate translation service পাওয়া যায়নি।") from last_error
 
 
+def _mymemory_translate_text(text: str, source: str, target: str) -> str:
+    parameters = {
+        "q": text,
+        "langpair": (
+            f"{_GOOGLE_LANGUAGE_CODES.get(source, source)}|"
+            f"{_GOOGLE_LANGUAGE_CODES.get(target, target)}"
+        ),
+    }
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            request = urllib.request.Request(
+                _MYMEMORY_TRANSLATE_ENDPOINT + "?" + urllib.parse.urlencode(parameters),
+                headers={"User-Agent": "BanglaSubtitleStudio/3.1"},
+            )
+            with urllib.request.urlopen(request, timeout=15) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            translated = html.unescape(
+                str(payload.get("responseData", {}).get("translatedText", ""))
+            ).strip()
+            if _valid_target_script(text, translated, target):
+                return translated
+            raise TranslationError("MyMemory translation-এর ভাষার অক্ষর সঠিক হয়নি।")
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(0.5)
+    raise TranslationError("MyMemory Accurate translation service পাওয়া যায়নি।") from last_error
+
+
+def _accurate_online_translate_text(text: str, source: str, target: str) -> str:
+    try:
+        return _google_translate_text(text, source, target)
+    except TranslationError as google_error:
+        try:
+            return _mymemory_translate_text(text, source, target)
+        except TranslationError as memory_error:
+            raise TranslationError(
+                "Google ও MyMemory Accurate translation পাওয়া যায়নি।"
+            ) from memory_error
+
+
 def translate_voice_segments(
     segments: list[SubtitleSegment],
     target_language: str,
@@ -258,7 +301,7 @@ def translate_voice_segments(
         for index, item in enumerate(segments):
             if cancel_event and cancel_event.is_set():
                 raise TranslationError("Voice Translation বাতিল করা হয়েছে।")
-            output = _google_translate_text(item.text.strip(), source, target)
+            output = _accurate_online_translate_text(item.text.strip(), source, target)
             output = _preserve_greeting(item.text, output, target)
             if target == "en":
                 output = _title_case_latin_words(output)
