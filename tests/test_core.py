@@ -21,11 +21,17 @@ from bangla_subtitle_studio.subtitles import (
 )
 from bangla_subtitle_studio.transcription import (
     OFFLINE_MODEL_NAME,
+    VAD_MODEL_NAME,
     _WHISPER_PROGRESS_RE,
     build_whisper_command,
     transcribe_audio_file,
 )
-from bangla_subtitle_studio.translation import shift_segments_earlier, translate_segments
+from bangla_subtitle_studio.translation import (
+    _preserve_greeting,
+    _select_semantic_candidate,
+    shift_segments_earlier,
+    translate_segments,
+)
 
 
 class SubtitleTests(unittest.TestCase):
@@ -126,22 +132,28 @@ class OfflineTranscriptionTests(unittest.TestCase):
     def test_whisper_command_uses_local_model_and_srt(self) -> None:
         command = build_whisper_command(
             "whisper-cli.exe",
-            "ggml-banglaasr-small-q5_0.bin",
+            "ggml-bengali-medium-q4_0.bin",
             "audio.wav",
             "subtitle",
             "en",
             "বাংলা বানান",
             threads=4,
+            vad_model_path="ggml-silero-v6.2.0.bin",
         )
         self.assertEqual(command[0], "whisper-cli.exe")
-        self.assertEqual(OFFLINE_MODEL_NAME, "ggml-banglaasr-small-q5_0.bin")
-        self.assertIn("ggml-banglaasr-small-q5_0.bin", command)
+        self.assertEqual(OFFLINE_MODEL_NAME, "ggml-bengali-medium-q4_0.bin")
+        self.assertEqual(VAD_MODEL_NAME, "ggml-silero-v6.2.0.bin")
+        self.assertIn("ggml-bengali-medium-q4_0.bin", command)
         self.assertIn("-osrt", command)
         self.assertIn("-pp", command)
         self.assertEqual(command[command.index("-l") + 1], "bn")
         self.assertNotIn("en", command)
         self.assertNotIn("-tr", command)
         self.assertIn("--prompt", command)
+        self.assertIn("--vad", command)
+        self.assertIn("ggml-silero-v6.2.0.bin", command)
+        self.assertEqual(command[command.index("-ml") + 1], "42")
+        self.assertNotIn("--carry-initial-prompt", command)
         self.assertNotIn("api.openai.com", " ".join(command))
 
     def test_live_progress_output_is_detected(self) -> None:
@@ -153,7 +165,7 @@ class OfflineTranscriptionTests(unittest.TestCase):
     def test_offline_srt_result_is_parsed(
         self, mocked_components: mock.Mock, mocked_popen: mock.Mock
     ) -> None:
-        mocked_components.return_value = ("whisper-cli.exe", "model.bin")
+        mocked_components.return_value = ("whisper-cli.exe", "model.bin", "vad.bin")
         process = mock.Mock()
         process.poll.return_value = 0
         process.returncode = 0
@@ -170,6 +182,22 @@ class OfflineTranscriptionTests(unittest.TestCase):
 
 
 class TranslationAndSyncTests(unittest.TestCase):
+    def test_semantic_reranking_prefers_meaning_preserving_translation(self) -> None:
+        chosen = _select_semantic_candidate(
+            "সবাই কেমন আছেন",
+            ["Everyone is here", "How is everyone"],
+            ["সবাই এখানে আছে", "সবাই কেমন আছেন"],
+        )
+        self.assertEqual(chosen, "How is everyone")
+
+    def test_islamic_greeting_is_not_lost_in_translation(self) -> None:
+        result = _preserve_greeting(
+            "আসসালামু আলাইকুম। সবাই কেমন আছেন?",
+            "How is everyone?",
+            "en",
+        )
+        self.assertEqual(result, "Assalamu Alaikum। How is everyone?")
+
     def test_subtitle_timing_is_shifted_earlier(self) -> None:
         result = shift_segments_earlier(
             [SubtitleSegment(1.0, 3.0, "বাংলা"), SubtitleSegment(0.1, 0.5, "শুরু")],
@@ -215,6 +243,7 @@ class UIRegressionTests(unittest.TestCase):
         self.assertIn('"العربية (Arabic)": "ar"', source)
         self.assertIn('                    "bn",', source)
         self.assertNotIn('"Auto Detect": "auto"', source)
+        self.assertIn('self.prompt_var = tk.StringVar(value="")', source)
 
 
 if __name__ == "__main__":

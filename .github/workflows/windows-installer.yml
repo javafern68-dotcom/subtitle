@@ -66,18 +66,25 @@ jobs:
           Copy-Item $cli.FullName "tools\whisper\whisper-cli.exe"
           Get-ChildItem $cli.Directory.FullName -Filter "*.dll" | Copy-Item -Destination "tools\whisper" -ErrorAction SilentlyContinue
 
-      - name: Download verified Fast Bangla AI model
+      - name: Download verified Accurate Bangla AI and VAD models
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path "models" | Out-Null
-          $model = "models\ggml-banglaasr-small-q5_0.bin"
+          $model = "models\ggml-bengali-medium-q4_0.bin"
           curl.exe -L --fail --retry 3 --retry-delay 5 `
-            "https://huggingface.co/afridee/banglaasr-ggml/resolve/main/ggml-banglaasr-small-q5_0.bin?download=true" `
+            "https://huggingface.co/SayedShaun/bengali-whisper-medium-ggml/resolve/main/ggml-model-q4_0.bin?download=true" `
             -o $model
-          $expectedHash = "e0b683fd0a516b28348310a965a964abcfab391b5a20ba2e619b720b75327d39"
+          $expectedHash = "6ccc65d58a7915f8d9a6d3d45ec2d6d10c784bd2c7b40a5a6b053712040b51d1"
           $actualHash = (Get-FileHash $model -Algorithm SHA256).Hash.ToLower()
           if ($actualHash -ne $expectedHash) { throw "Offline model checksum mismatch: $actualHash" }
+          $vadModel = "models\ggml-silero-v6.2.0.bin"
+          curl.exe -L --fail --retry 3 --retry-delay 5 `
+            "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin?download=true" `
+            -o $vadModel
+          $expectedVadHash = "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"
+          $actualVadHash = (Get-FileHash $vadModel -Algorithm SHA256).Hash.ToLower()
+          if ($actualVadHash -ne $expectedVadHash) { throw "VAD model checksum mismatch: $actualVadHash" }
 
       - name: Build Offline 100-language Translation model
         shell: pwsh
@@ -124,7 +131,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$app\models" | Out-Null
           New-Item -ItemType Directory -Force -Path "$app\licenses" | Out-Null
           Copy-Item "tools\whisper\*" "$app\tools\whisper" -Recurse -Force
-          Copy-Item "models\ggml-banglaasr-small-q5_0.bin" "$app\models\ggml-banglaasr-small-q5_0.bin"
+          Copy-Item "models\ggml-bengali-medium-q4_0.bin" "$app\models\ggml-bengali-medium-q4_0.bin"
+          Copy-Item "models\ggml-silero-v6.2.0.bin" "$app\models\ggml-silero-v6.2.0.bin"
           Copy-Item "models\m2m100-418M-int8" "$app\models\m2m100-418M-int8" -Recurse -Force
           Copy-Item "THIRD_PARTY_NOTICES.txt" "$app\licenses\THIRD_PARTY_NOTICES.txt"
           Copy-Item "whisper-src\LICENSE" "$app\licenses\whisper.cpp-LICENSE.txt"
@@ -137,17 +145,20 @@ jobs:
           if (!(Test-Path "$app\Bangla Subtitle Studio.exe")) { throw "Application EXE missing" }
           if (!(Test-Path "$app\_internal\tools\ffmpeg.exe") -and !(Test-Path "$app\tools\ffmpeg.exe")) { throw "FFmpeg missing" }
           if (!(Test-Path "$app\tools\whisper\whisper-cli.exe")) { throw "Offline Whisper engine missing" }
-          if (!(Test-Path "$app\models\ggml-banglaasr-small-q5_0.bin")) { throw "Offline model missing" }
+          if (!(Test-Path "$app\models\ggml-bengali-medium-q4_0.bin")) { throw "Accurate Offline model missing" }
+          if (!(Test-Path "$app\models\ggml-silero-v6.2.0.bin")) { throw "Voice Activity Detection model missing" }
           if (!(Test-Path "$app\models\m2m100-418M-int8\model.bin")) { throw "Offline Translation model missing" }
           & "$app\tools\whisper\whisper-cli.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "Offline Whisper engine self-test failed" }
-          $modelHash = (Get-FileHash "$app\models\ggml-banglaasr-small-q5_0.bin" -Algorithm SHA256).Hash.ToLower()
-          if ($modelHash -ne "e0b683fd0a516b28348310a965a964abcfab391b5a20ba2e619b720b75327d39") { throw "Bundled model verification failed" }
+          $modelHash = (Get-FileHash "$app\models\ggml-bengali-medium-q4_0.bin" -Algorithm SHA256).Hash.ToLower()
+          if ($modelHash -ne "6ccc65d58a7915f8d9a6d3d45ec2d6d10c784bd2c7b40a5a6b053712040b51d1") { throw "Bundled model verification failed" }
+          $vadHash = (Get-FileHash "$app\models\ggml-silero-v6.2.0.bin" -Algorithm SHA256).Hash.ToLower()
+          if ($vadHash -ne "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987") { throw "Bundled VAD model verification failed" }
           curl.exe -L --fail --retry 3 --retry-delay 5 `
             "https://huggingface.co/bangla-speech-processing/BanglaASR/resolve/main/mp3/common_voice_bn_31515636.mp3?download=true" `
             -o "bangla-smoke.mp3"
           & "$app\_internal\tools\ffmpeg.exe" -y -hide_banner -loglevel error -i "bangla-smoke.mp3" -ar 16000 -ac 1 -c:a pcm_s16le "bangla-smoke.wav"
-          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-banglaasr-small-q5_0.bin" -f "bangla-smoke.wav" -l bn -otxt -osrt -of "bangla-smoke" -np --prompt "আমি বাংলা ভাষায় কথা বলছি। সব কথা বাংলা অক্ষরে লেখা হচ্ছে।"
+          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-bengali-medium-q4_0.bin" -f "bangla-smoke.wav" -l bn -otxt -osrt -of "bangla-smoke" -ml 42 -sow -np --vad -vm "$app\models\ggml-silero-v6.2.0.bin" -vt 0.45 -vspd 120 -vsd 250 -vmsd 28 -vp 120 -vo 0.20
           if ($LASTEXITCODE -ne 0) { throw "Offline Bengali transcription smoke test failed" }
           $banglaText = Get-Content "bangla-smoke.txt" -Raw -Encoding UTF8
           if ($banglaText -notmatch '[\u0980-\u09FF]') { throw "The bundled model did not create Bengali-script text: $banglaText" }
@@ -168,12 +179,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -181,30 +192,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v2.4.1"
+          $tag = "v2.5.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.exe" `
-              "installer\Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe" `
+              "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V2.4.1 Multilanguage Fixed" `
-              --notes "Fixes the Offline subtitle read error while keeping the familiar V2.2 editor, faster Bengali speech recognition, Bengali Unicode and Avro/Banglish output, and Offline translation into Hindi, English, Arabic, Urdu and many more languages. The SRT reader now recovers valid subtitles from mildly irregular AI output. Subtitles remain 0.35 seconds earlier by default with adjustable timing. The build verifies a real Bengali SRT and packaged Bengali-to-Hindi translation. No API key, subscription, or per-video cost. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V2.5 Accurate Multilanguage" `
+              --notes "Restores the proven V2.2 Bengali Medium Q4 recognition model for faithful speech-to-text, adds Silero Voice Activity Detection so speech is detected from the correct position, creates shorter native timed lines instead of estimating long-segment timing, and checks two translation candidates by translating them back to Bengali before choosing the closest meaning. Bengali Unicode, Avro/Banglish, Hindi, English, Arabic, Urdu and all previous languages remain. No API key, Internet, subscription, or per-video cost. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.exe" `
-              "installer\Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe" `
+              "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Multilanguage-Fixed-Setup-V2.4.1
+          name: Bangla-Subtitle-Studio-Accurate-Multilanguage-Setup-V2.5
           path: |
-            installer/Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.exe
-            installer/Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.sha256.txt
+            installer/Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe
+            installer/Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

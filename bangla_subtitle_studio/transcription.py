@@ -23,13 +23,10 @@ class TranscriptionError(RuntimeError):
 ProgressCallback = Callable[[float, str], None]
 AudioProgressCallback = Callable[[float, float], None]
 
-OFFLINE_MODEL_NAME = "ggml-banglaasr-small-q5_0.bin"
+OFFLINE_MODEL_NAME = "ggml-bengali-medium-q4_0.bin"
+VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
 OFFLINE_ENGINE_NAME = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 _WHISPER_PROGRESS_RE = re.compile(rb"progress\s*=\s*(\d{1,3})%", re.IGNORECASE)
-BANGLA_SCRIPT_PROMPT = (
-    "আমি বাংলাদেশের বাংলা ভাষায় কথা বলছি। সব কথা বাংলা অক্ষরে হুবহু লেখা হচ্ছে। "
-    "বাংলা বাক্য, বাংলা বানান এবং বাংলা যতিচিহ্ন ব্যবহার করা হচ্ছে।"
-)
 
 
 def _application_roots() -> list[Path]:
@@ -56,14 +53,17 @@ def _resolve_offline_component(environment_name: str, relative_path: Path) -> st
     )
 
 
-def offline_components() -> tuple[str, str]:
+def offline_components() -> tuple[str, str, str]:
     engine = _resolve_offline_component(
         "BSS_WHISPER_CLI", Path("tools") / "whisper" / OFFLINE_ENGINE_NAME
     )
     model = _resolve_offline_component(
         "BSS_WHISPER_MODEL", Path("models") / OFFLINE_MODEL_NAME
     )
-    return engine, model
+    vad_model = _resolve_offline_component(
+        "BSS_VAD_MODEL", Path("models") / VAD_MODEL_NAME
+    )
+    return engine, model, vad_model
 
 
 def build_whisper_command(
@@ -74,6 +74,7 @@ def build_whisper_command(
     language: str = "bn",
     prompt: str = "",
     threads: int | None = None,
+    vad_model_path: str = "",
 ) -> list[str]:
     # Use all available cores on small computers, while keeping a sensible cap
     # for laptops with many logical cores.
@@ -92,14 +93,36 @@ def build_whisper_command(
         "-of",
         output_prefix,
         "-ml",
-        "84",
+        "42",
         "-sow",
         "-np",
         "-pp",
     ]
-    clean_prompt = " ".join(f"{BANGLA_SCRIPT_PROMPT} {prompt}".split()).strip()
+    if vad_model_path:
+        command.extend(
+            [
+                "--vad",
+                "-vm",
+                vad_model_path,
+                "-vt",
+                "0.45",
+                "-vspd",
+                "120",
+                "-vsd",
+                "250",
+                "-vmsd",
+                "28",
+                "-vp",
+                "120",
+                "-vo",
+                "0.20",
+            ]
+        )
+    # A long generic prompt can be repeated as a hallucination by a fine-tuned
+    # model. Only pass the user's proper names/terms as a short vocabulary hint.
+    clean_prompt = " ".join(prompt.split()).strip()
     if clean_prompt:
-        command.extend(["--prompt", clean_prompt[:700], "--carry-initial-prompt"])
+        command.extend(["--prompt", clean_prompt[:300]])
     return command
 
 
@@ -111,7 +134,7 @@ def transcribe_audio_file(
     output_prefix: str | None = None,
     progress: AudioProgressCallback | None = None,
 ) -> list[SubtitleSegment]:
-    engine, model = offline_components()
+    engine, model, vad_model = offline_components()
     prefix = output_prefix or str(Path(audio_path).with_suffix("")) + "_subtitle"
     srt_path = Path(prefix + ".srt")
     log_path = Path(prefix + ".log")
@@ -122,6 +145,7 @@ def transcribe_audio_file(
         prefix,
         language,
         prompt,
+        vad_model_path=vad_model,
     )
 
     try:
@@ -207,7 +231,7 @@ def transcribe_video(
     prompt: str = "",
     progress: ProgressCallback | None = None,
     cancel_event: threading.Event | None = None,
-    chunk_seconds: float = 300.0,
+    chunk_seconds: float = 180.0,
 ) -> list[SubtitleSegment]:
     # Resolve before extracting audio so a damaged installation fails immediately.
     offline_components()
@@ -278,4 +302,4 @@ def transcribe_video(
                     (index + 1) / total_parts,
                     f"Offline অংশ {index + 1}/{total_parts} সম্পন্ন",
                 )
-    return split_for_readability(combined, max_words=12, max_duration=6.0)
+    return split_for_readability(combined, max_words=10, max_duration=5.0)

@@ -1,16 +1,20 @@
-# Bangla Subtitle Studio V2.4.1 — দ্রুত Multilanguage Subtitle (Fixed)
+# Bangla Subtitle Studio V2.5 — নির্ভুল Multilanguage Subtitle
 
 বাংলা ভিডিও থেকে সময়সহ বাংলা সাবটাইটেল তৈরি, লেখা সংশোধন, স্টাইল পরিবর্তন, ভিডিওর ওপর লোগো বসানো, কালার ঠিক করা এবং নতুন MP4 Export করার Windows সফটওয়্যার।
 
 ## গুরুত্বপূর্ণ সুবিধা
 
-- V2.4.1-এ নতুন দ্রুত model-এর তৈরি SRT পড়ার সমস্যাটি ঠিক করা হয়েছে; একটি time line ভুল হলেও বাকি subtitle আর নষ্ট হবে না।
+- V2.2-তে ভালো কাজ করা Bengali Medium Q4 model আবার ব্যবহার করা হয়েছে, তাই ভিডিও যা বলবে সেটিই যথাসম্ভব হুবহু বাংলায় লেখা হবে।
+- Voice Activity Detection ভিডিওর শুরু থেকেই মানুষের কথা খুঁজবে; music বা silence-এর কারণে এক মিনিট পরে subtitle শুরু হওয়ার সমস্যা কমাবে।
+- প্রতিটি ছোট speech line-এর আসল সময় নেওয়া হবে; বড় line ভাগ করে আন্দাজের সময় দেওয়া হবে না।
+- Hindi/English/Arabicসহ অন্য ভাষায় দুইটি translation বানিয়ে দুটিকেই আবার বাংলায় ফিরিয়ে অর্থ মিলিয়ে সবচেয়ে সঠিকটি রাখা হবে।
+- `আসসালামু আলাইকুম`-এর মতো গুরুত্বপূর্ণ greeting অনুবাদে হারিয়ে যাবে না।
+- V2.4.1-এর SRT reader fix-টিও রাখা হয়েছে।
 - Subtitle তৈরির জন্য কোনো API key লাগবে না।
 - OpenAI balance বা মাসিক subscription লাগবে না।
 - Internet ছাড়াই যত খুশি subtitle তৈরি করা যাবে।
 - ভিডিও ও অডিও আপনার কম্পিউটারের বাইরে পাঠানো হবে না।
-- বাংলা কথার জন্য আলাদাভাবে প্রশিক্ষিত দ্রুত Whisper Bengali Small Q5 model installer-এর মধ্যেই থাকবে।
-- বাংলা voice দ্রুত Bengali Small model দিয়ে লেখা হবে।
+- বাংলা কথার জন্য V2.2-এর নির্ভরযোগ্য Whisper Bengali Medium Q4 model installer-এর মধ্যেই থাকবে।
 - Subtitle ভাষা হিসেবে বাংলা Unicode, বাংলা Avro/Banglish, Hindi, English, Arabic, Urdu, Nepali, Punjabi, Tamil, Telugu, Gujarati, Persian, Spanish, French, German, Italian, Portuguese, Russian, Turkish, Chinese, Japanese ও Korean নির্বাচন করা যাবে।
 - Hindi/English/Arabicসহ Translation সম্পূর্ণ Offline AI দিয়ে হবে; API key বা Internet লাগবে না।
 - Voice-এর পরে subtitle আসার সমস্যা কমাতে subtitle default ০.৩৫ সেকেন্ড আগে দেখানো হবে। এই সময় software থেকে পরিবর্তন করা যাবে।
@@ -18,12 +22,12 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Multilanguage_Fixed_Setup_V2.4.1.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V2.4.1 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V2.5 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Offline Subtitle তৈরির নিয়ম
 
@@ -35,7 +39,7 @@
 ৬. কাজ চলার সময় software বন্ধ করবেন না। Internet চালু রাখার প্রয়োজন নেই।  
 ৭. তৈরি হওয়া কোনো লাইনে double-click করে লেখা বা সময় ঠিক করুন।
 
-Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V2.4-এর Bengali Small model আগের V2.2 Medium model-এর তুলনায় অনেক ছোট ও দ্রুত। বাংলা Unicode ও Avro সবচেয়ে দ্রুত; অন্য ভাষা নিলে বাংলা লেখা তৈরির পরে Offline Translation-এর জন্য কিছু অতিরিক্ত সময় লাগবে। কাজ চলার সময় নিচে live শতাংশের সঙ্গে সেকেন্ডও বদলাবে—সেকেন্ড বাড়তে থাকলে software কাজ করছে।
+Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V2.5-এ accuracy-কে অগ্রাধিকার দিয়ে V2.2-এর Bengali Medium model ব্যবহার করা হয়েছে, তাই V2.4 Fast model-এর চেয়ে কিছু সময় বেশি লাগতে পারে। বাংলা Unicode ও Avro সবচেয়ে দ্রুত; অন্য ভাষায় অর্থ যাচাই করার জন্য Translation-এ অতিরিক্ত সময় লাগবে। কাজ চলার সময় নিচের live সময় বাড়লে software কাজ করছে।
 
 ## Subtitle Style
 
@@ -80,7 +84,7 @@ Manual controls: Brightness, Contrast, Saturation, Temperature ও Tint।
 - `Offline বাংলা AI model পাওয়া যায়নি`: V2 Offline installer আবার install করুন।
 - কাজ ধীরে হচ্ছে: নিচের “কাজ চলছে” সময় বাড়ছে কি না দেখুন, অন্য ভারী software বন্ধ করুন এবং কাজ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।
 - `পর্যাপ্ত RAM` বার্তা: অন্য software বন্ধ করে আবার চেষ্টা করুন।
-- `Offline subtitle পড়া যায়নি`: V2.4.1 install করুন; এই সংস্করণে SRT reader fix করা হয়েছে।
+- `Offline subtitle পড়া যায়নি`: V2.5 আবার install করুন; SRT reader fix এই সংস্করণেও আছে।
 - বাংলা অক্ষর box দেখায়: Windows Settings থেকে Bengali language/font support install করুন।
 - কথা ভুল লিখেছে: background music কমানো বা পরিষ্কার audio ব্যবহার করা ভালো; ভুল line-এ double-click করে সংশোধন করুন।
 

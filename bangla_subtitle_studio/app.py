@@ -22,7 +22,7 @@ from .translation import shift_segments_earlier, translate_segments
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "2.4.1"
+APP_VERSION = "2.5.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -148,7 +148,7 @@ class BanglaSubtitleStudio(tk.Tk):
         )
         self.language_var = tk.StringVar(value="বাংলা (বাংলা অক্ষর)")
         self.subtitle_lead_var = tk.DoubleVar(value=0.35)
-        self.prompt_var = tk.StringVar(value="বাংলা ভাষা, বাংলাদেশের স্বাভাবিক বানান ও যতিচিহ্ন ব্যবহার করুন।")
+        self.prompt_var = tk.StringVar(value="")
         self.font_var = tk.StringVar(value="Nirmala UI")
         self.font_size_var = tk.DoubleVar(value=58)
         self.outline_var = tk.DoubleVar(value=4)
@@ -255,7 +255,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             generator,
-            text="AI Model: Bangla Fast + Offline 100-language Translation • Avro-সহ",
+            text="AI Model: V2.2 Accurate Bangla + Voice Timing + Meaning-Checked Translation",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(0, 10))

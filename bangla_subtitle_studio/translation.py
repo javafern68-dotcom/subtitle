@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import threading
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Callable
 
@@ -15,6 +17,16 @@ class TranslationError(RuntimeError):
 
 TranslationProgress = Callable[[float, str], None]
 TRANSLATION_MODEL_DIR = "m2m100-418M-int8"
+_BANGLA_GREETING_RE = re.compile(
+    r"আস+সালামু[য়য়]?[া ]*আলাইকুম|আসসালামু\s+আলাইকুম",
+    re.IGNORECASE,
+)
+_TARGET_GREETINGS = {
+    "en": "Assalamu Alaikum",
+    "hi": "अस्सलामु अलैकुम",
+    "ar": "السلام عليكم",
+    "ur": "السلام علیکم",
+}
 
 
 def _application_roots() -> list[Path]:
@@ -59,6 +71,51 @@ def _avro_reverse(texts: list[str]) -> list[str]:
     except ImportError as exc:
         raise TranslationError("Avro converter পাওয়া যায়নি। Software আবার Install করুন।") from exc
     return [str(value).strip() for value in avro.reverse_iter(texts)]
+
+
+def _comparison_text(value: str) -> str:
+    return re.sub(r"[^\w\u0980-\u09FF]+", "", value.casefold())
+
+
+def _select_semantic_candidate(
+    source: str, candidates: list[str], back_translations: list[str]
+) -> str:
+    """Pick the target sentence whose Bengali back-translation keeps most meaning."""
+    if not candidates:
+        return ""
+    source_key = _comparison_text(source)
+    best_index = 0
+    best_score = -1.0
+    for index, candidate in enumerate(candidates):
+        back = back_translations[index] if index < len(back_translations) else ""
+        score = SequenceMatcher(None, source_key, _comparison_text(back)).ratio()
+        if score > best_score:
+            best_index = index
+            best_score = score
+    return candidates[best_index].strip()
+
+
+def _preserve_greeting(source: str, translated: str, target: str) -> str:
+    if not _BANGLA_GREETING_RE.search(source):
+        return translated.strip()
+    greeting = _TARGET_GREETINGS.get(target, "Assalamu Alaikum")
+    lowered = translated.casefold()
+    greeting_is_present = (
+        "salam" in lowered
+        or "सलाम" in translated
+        or "अस्स" in translated
+        or "سلام" in translated
+    )
+    if greeting_is_present:
+        return translated.strip()
+    rest = translated.strip()
+    return greeting + ("। " + rest if rest else "")
+
+
+def _decode_hypothesis(tokenizer: object, tokens: list[str], prefix: str) -> str:
+    output_tokens = tokens[1:] if tokens and tokens[0] == prefix else tokens
+    token_ids = tokenizer.convert_tokens_to_ids(output_tokens)
+    return tokenizer.decode(token_ids, skip_special_tokens=True).strip()
 
 
 def translate_segments(
@@ -108,7 +165,7 @@ def translate_segments(
         )
 
         translated: list[str] = []
-        batch_size = 24
+        batch_size = 12
         for start in range(0, len(source_texts), batch_size):
             if cancel_event and cancel_event.is_set():
                 raise TranslationError("Subtitle Translation বাতিল করা হয়েছে।")
@@ -119,13 +176,56 @@ def translate_segments(
             results = translator.translate_batch(
                 encoded,
                 target_prefix=[[target_token]] * len(encoded),
-                beam_size=5,
-                patience=1.0,
-                max_decoding_length=128,
+                beam_size=6,
+                num_hypotheses=2,
+                patience=1.2,
+                max_decoding_length=160,
+                repetition_penalty=1.08,
+                no_repeat_ngram_size=3,
+                disable_unk=True,
             )
-            for result in results:
-                token_ids = tokenizer.convert_tokens_to_ids(result.hypotheses[0][1:])
-                translated.append(tokenizer.decode(token_ids, skip_special_tokens=True).strip())
+            candidate_rows = [
+                [
+                    _decode_hypothesis(tokenizer, hypothesis, target_token)
+                    for hypothesis in result.hypotheses
+                ]
+                for result in results
+            ]
+
+            # A second, cheap check translates both candidates back to Bengali.
+            # The target line that reconstructs the source meaning most closely
+            # is selected. This reduces fluent-looking but unrelated subtitles.
+            tokenizer.src_lang = target
+            flat_candidates = [candidate for row in candidate_rows for candidate in row]
+            back_encoded = [
+                tokenizer.convert_ids_to_tokens(tokenizer.encode(text))
+                for text in flat_candidates
+            ]
+            bengali_token = tokenizer.lang_code_to_token["bn"]
+            back_results = translator.translate_batch(
+                back_encoded,
+                target_prefix=[[bengali_token]] * len(back_encoded),
+                beam_size=4,
+                max_decoding_length=160,
+                repetition_penalty=1.05,
+                no_repeat_ngram_size=3,
+                disable_unk=True,
+            )
+            back_texts = [
+                _decode_hypothesis(tokenizer, result.hypotheses[0], bengali_token)
+                for result in back_results
+            ]
+            tokenizer.src_lang = "bn"
+            back_index = 0
+            for local_index, candidates in enumerate(candidate_rows):
+                candidate_backs = back_texts[back_index : back_index + len(candidates)]
+                chosen = _select_semantic_candidate(
+                    batch[local_index], candidates, candidate_backs
+                )
+                translated.append(
+                    _preserve_greeting(batch[local_index], chosen, target)
+                )
+                back_index += len(candidates)
             if progress:
                 completed = min(len(source_texts), start + len(batch))
                 progress(
@@ -138,6 +238,11 @@ def translate_segments(
         raise TranslationError(
             "Offline Translation সম্পন্ন হয়নি। অন্য ভারী Software বন্ধ করে আবার চেষ্টা করুন।"
         ) from exc
+
+    if translated and all(_comparison_text(value) == _comparison_text(source_texts[index]) for index, value in enumerate(translated)):
+        raise TranslationError(
+            "নির্বাচিত ভাষায় অর্থপূর্ণ Translation তৈরি হয়নি। আবার চেষ্টা করুন।"
+        )
 
     return [
         SubtitleSegment(item.start, item.end, translated[index] or item.text, item.text)

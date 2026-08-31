@@ -5,10 +5,15 @@ Copyright (c) 2023-2026 The ggml authors
 Source: https://github.com/ggml-org/whisper.cpp
 License: MIT
 
-Bengali fine-tuned Whisper Small model
-Converted model: https://huggingface.co/afridee/banglaasr-ggml
-Fine-tuned source: https://huggingface.co/bangla-speech-processing/BanglaASR
+Bengali fine-tuned Whisper Medium Q4 model
+Converted model: https://huggingface.co/SayedShaun/bengali-whisper-medium-ggml
+Fine-tuned source: https://huggingface.co/SayedShaun/bengali-whisper-medium
 Based on OpenAI Whisper: https://github.com/openai/whisper
+License: Apache-2.0
+
+Silero Voice Activity Detection model for whisper.cpp
+Source: https://huggingface.co/ggml-org/whisper-vad
+File: ggml-silero-v6.2.0.bin
 License: MIT
 
 M2M100 418M multilingual translation model
