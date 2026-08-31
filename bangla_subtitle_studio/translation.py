@@ -168,13 +168,17 @@ def translate_segments(
     target_language: str,
     progress: TranslationProgress | None = None,
     cancel_event: threading.Event | None = None,
+    source_language: str = "bn",
 ) -> list[SubtitleSegment]:
     target = target_language.strip().lower()
-    if target == "bn":
+    source = source_language.strip().lower()
+    if target == source:
         return [SubtitleSegment(item.start, item.end, item.text, "") for item in segments]
 
     source_texts = [item.text.strip() for item in segments]
     if target == "avro":
+        if source != "bn":
+            raise TranslationError("Avro/Banglish শুধু বাংলা source voice-এর জন্য ব্যবহার করুন।")
         if progress:
             progress(0.15, "বাংলা লেখা Avro/Banglish করা হচ্ছে…")
         converted = [
@@ -200,7 +204,9 @@ def translate_segments(
             local_files_only=True,
             clean_up_tokenization_spaces=True,
         )
-        tokenizer.src_lang = "bn"
+        if source not in tokenizer.lang_code_to_token:
+            raise TranslationError("মূল voice-এর নির্বাচিত ভাষাটি Translation model-এ নেই।")
+        tokenizer.src_lang = source
         target_token = tokenizer.lang_code_to_token.get(target)
         if not target_token:
             raise TranslationError("নির্বাচিত ভাষাটি Offline Translation model-এ নেই।")
@@ -240,19 +246,19 @@ def translate_segments(
                 for result in results
             ]
 
-            # A second, cheap check translates both candidates back to Bengali.
-            # The target line that reconstructs the source meaning most closely
-            # is selected. This reduces fluent-looking but unrelated subtitles.
+            # Translate both candidates back to the selected source language.
+            # The candidate that reconstructs the original meaning most closely
+            # is selected. This reduces fluent-looking but unrelated dubbing.
             tokenizer.src_lang = target
             flat_candidates = [candidate for row in candidate_rows for candidate in row]
             back_encoded = [
                 tokenizer.convert_ids_to_tokens(tokenizer.encode(text))
                 for text in flat_candidates
             ]
-            bengali_token = tokenizer.lang_code_to_token["bn"]
+            source_token = tokenizer.lang_code_to_token[source]
             back_results = translator.translate_batch(
                 back_encoded,
-                target_prefix=[[bengali_token]] * len(back_encoded),
+                target_prefix=[[source_token]] * len(back_encoded),
                 beam_size=4,
                 max_decoding_length=160,
                 repetition_penalty=1.05,
@@ -260,17 +266,21 @@ def translate_segments(
                 disable_unk=True,
             )
             back_texts = [
-                _decode_hypothesis(tokenizer, result.hypotheses[0], bengali_token)
+                _decode_hypothesis(tokenizer, result.hypotheses[0], source_token)
                 for result in back_results
             ]
-            tokenizer.src_lang = "bn"
+            tokenizer.src_lang = source
             back_index = 0
             for local_index, candidates in enumerate(candidate_rows):
                 candidate_backs = back_texts[back_index : back_index + len(candidates)]
                 chosen = _select_semantic_candidate(
                     batch[local_index], candidates, candidate_backs
                 )
-                output = _preserve_greeting(batch[local_index], chosen, target)
+                output = (
+                    _preserve_greeting(batch[local_index], chosen, target)
+                    if source == "bn"
+                    else chosen
+                )
                 translated.append(
                     _title_case_latin_words(output) if target == "en" else output
                 )

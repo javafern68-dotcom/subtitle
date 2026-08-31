@@ -24,6 +24,7 @@ ProgressCallback = Callable[[float, str], None]
 AudioProgressCallback = Callable[[float, float], None]
 
 OFFLINE_MODEL_NAME = "ggml-bengali-medium-q4_0.bin"
+MULTILINGUAL_MODEL_NAME = "ggml-small-q5_1.bin"
 VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
 OFFLINE_ENGINE_NAME = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 _WHISPER_PROGRESS_RE = re.compile(rb"progress\s*=\s*(\d{1,3})%", re.IGNORECASE)
@@ -66,6 +67,19 @@ def offline_components() -> tuple[str, str, str]:
     return engine, model, vad_model
 
 
+def multilingual_offline_components() -> tuple[str, str, str]:
+    engine = _resolve_offline_component(
+        "BSS_WHISPER_CLI", Path("tools") / "whisper" / OFFLINE_ENGINE_NAME
+    )
+    model = _resolve_offline_component(
+        "BSS_MULTILINGUAL_WHISPER_MODEL", Path("models") / MULTILINGUAL_MODEL_NAME
+    )
+    vad_model = _resolve_offline_component(
+        "BSS_VAD_MODEL", Path("models") / VAD_MODEL_NAME
+    )
+    return engine, model, vad_model
+
+
 def build_whisper_command(
     engine_path: str,
     model_path: str,
@@ -75,10 +89,15 @@ def build_whisper_command(
     prompt: str = "",
     threads: int | None = None,
     vad_model_path: str = "",
+    force_bengali: bool = True,
 ) -> list[str]:
     # Use all available cores on small computers, while keeping a sensible cap
     # for laptops with many logical cores.
     thread_count = threads or max(2, min(8, os.cpu_count() or 4))
+    requested_language = language.strip().lower()
+    effective_language = "bn" if force_bengali else requested_language
+    if not re.fullmatch(r"[a-z]{2,3}", effective_language):
+        effective_language = "bn" if force_bengali else "auto"
     command = [
         engine_path,
         "-m",
@@ -86,14 +105,14 @@ def build_whisper_command(
         "-f",
         audio_path,
         "-l",
-        "bn",
+        effective_language,
         "-t",
         str(thread_count),
         "-osrt",
         "-of",
         output_prefix,
-            "-ml",
-            "84",
+        "-ml",
+        "84",
         "-sow",
         "-np",
         "-pp",
@@ -133,8 +152,10 @@ def transcribe_audio_file(
     cancel_event: threading.Event | None = None,
     output_prefix: str | None = None,
     progress: AudioProgressCallback | None = None,
+    components: tuple[str, str, str] | None = None,
+    force_bengali: bool = True,
 ) -> list[SubtitleSegment]:
-    engine, model, vad_model = offline_components()
+    engine, model, vad_model = components or offline_components()
     prefix = output_prefix or str(Path(audio_path).with_suffix("")) + "_subtitle"
     srt_path = Path(prefix + ".srt")
     log_path = Path(prefix + ".log")
@@ -146,6 +167,7 @@ def transcribe_audio_file(
         language,
         prompt,
         vad_model_path=vad_model,
+        force_bengali=force_bengali,
     )
 
     try:
@@ -232,16 +254,22 @@ def transcribe_video(
     progress: ProgressCallback | None = None,
     cancel_event: threading.Event | None = None,
     chunk_seconds: float = 180.0,
+    multilingual: bool = False,
 ) -> list[SubtitleSegment]:
     # Resolve before extracting audio so a damaged installation fails immediately.
-    offline_components()
-    # This edition intentionally creates Bengali-script subtitles only. Keeping the
-    # language token fixed prevents accidental auto-detection or translation.
-    language = "bn"
+    requested_language = language.strip().lower()
+    use_multilingual_model = multilingual and requested_language != "bn"
+    components = (
+        multilingual_offline_components() if use_multilingual_model else offline_components()
+    )
+    # Normal subtitle generation keeps the proven Bengali-only model. Voice
+    # Translate opts into the multilingual model for non-Bengali source audio.
+    if not use_multilingual_model:
+        language = "bn"
     total_parts = max(1, math.ceil(max(duration, 0.1) / chunk_seconds))
     combined: list[SubtitleSegment] = []
     previous_context = ""
-    with tempfile.TemporaryDirectory(prefix="bangla_subtitle_offline_") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="subtitle_voice_offline_") as temp_dir:
         for index in range(total_parts):
             if cancel_event and cancel_event.is_set():
                 raise TranscriptionError("সাবটাইটেল তৈরি বাতিল করা হয়েছে।")
@@ -257,11 +285,12 @@ def transcribe_video(
             if progress:
                 progress(
                     (index + 0.15) / total_parts,
-                    f"কম্পিউটারে বাংলা লেখা তৈরি হচ্ছে—অংশ {index + 1}/{total_parts}। সময় লাগতে পারে…",
+                    f"কম্পিউটারে কথার লেখা তৈরি হচ্ছে—অংশ {index + 1}/{total_parts}। সময় লাগতে পারে…",
                 )
             context_prompt = prompt.strip()
             if previous_context:
-                context_prompt = (context_prompt + "\nআগের অংশ: " + previous_context[-450:]).strip()
+                context_label = "আগের অংশ:" if language == "bn" else "Previous context:"
+                context_prompt = (context_prompt + f"\n{context_label} " + previous_context[-450:]).strip()
             output_prefix = str(Path(temp_dir) / f"subtitle_{index:03d}")
 
             def part_progress(value: float, elapsed_seconds: float) -> None:
@@ -279,12 +308,14 @@ def transcribe_video(
                     )
 
             part_segments = transcribe_audio_file(
-                audio_path,
-                language,
-                context_prompt,
-                cancel_event,
-                output_prefix,
-                part_progress,
+                audio_path=audio_path,
+                language=language,
+                prompt=context_prompt,
+                cancel_event=cancel_event,
+                output_prefix=output_prefix,
+                progress=part_progress,
+                components=components,
+                force_bengali=not use_multilingual_model,
             )
             for item in part_segments:
                 combined.append(

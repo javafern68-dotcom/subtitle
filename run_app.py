@@ -1,16 +1,24 @@
 import re
 import sys
+from pathlib import Path
 
 from bangla_subtitle_studio.app import main
+from bangla_subtitle_studio.media import probe_video
 from bangla_subtitle_studio.models import SubtitleSegment
 from bangla_subtitle_studio.subtitles import parse_srt
 from bangla_subtitle_studio.translation import translate_segments
+from bangla_subtitle_studio.voice_translate import create_voice_translated_video
 
 
 def translation_self_test() -> None:
     source = [SubtitleSegment(0, 3, "আসসালামু আলাইকুম। সবাই কেমন আছেন?")]
     hindi_item = translate_segments(source, "hi")[0]
     english_item = translate_segments(source, "en")[0]
+    hindi_to_bangla = translate_segments(
+        [SubtitleSegment(0, 3, "आप कैसे हैं?")],
+        "bn",
+        source_language="hi",
+    )[0]
     avro_item = translate_segments(
         [SubtitleSegment(0, 3, "বিসমিল্লাহির রহমানির রাহিম")],
         "avro",
@@ -34,6 +42,10 @@ def translation_self_test() -> None:
         raise RuntimeError(f"Avro Roman-only self-test failed: {avro_item}")
     if hindi_item.start != source[0].start or english_item.end != source[0].end:
         raise RuntimeError("Translation changed subtitle timing")
+    if not re.search(r"[\u0980-\u09FF]", hindi_to_bangla.text):
+        raise RuntimeError(
+            f"Hindi-to-Bengali translation self-test failed: {hindi_to_bangla.text}"
+        )
 
 
 def srt_self_test(path: str) -> None:
@@ -41,6 +53,26 @@ def srt_self_test(path: str) -> None:
     text = " ".join(item.text for item in segments)
     if not segments or not re.search(r"[\u0980-\u09FF]", text) or segments[0].start > 5.0:
         raise RuntimeError(f"Bengali SRT self-test failed: {text}")
+
+
+def voice_translate_self_test(input_video: str, output_video: str) -> None:
+    info = probe_video(input_video)
+    segments = create_voice_translated_video(
+        input_video,
+        float(info["duration"]),
+        "hi",
+        "bn",
+        "Female",
+        output_video,
+    )
+    text = " ".join(item.text for item in segments)
+    if not segments or not re.search(r"[\u0980-\u09FF]", text):
+        raise RuntimeError(f"Hindi voice did not become Bengali text/voice: {text}")
+    if not Path(output_video).is_file() or Path(output_video).stat().st_size < 10_000:
+        raise RuntimeError("Bengali dubbed video was not created")
+    output_info = probe_video(output_video)
+    if float(output_info["duration"]) < 0.5:
+        raise RuntimeError("Bengali dubbed video is empty")
 
 
 if __name__ == "__main__":
@@ -53,6 +85,15 @@ if __name__ == "__main__":
     elif "--translation-self-test" in sys.argv:
         try:
             translation_self_test()
+        except Exception:
+            sys.exit(1)
+    elif "--voice-translate-self-test" in sys.argv:
+        try:
+            option_index = sys.argv.index("--voice-translate-self-test")
+            voice_translate_self_test(
+                sys.argv[option_index + 1],
+                sys.argv[option_index + 2],
+            )
         except Exception:
             sys.exit(1)
     else:

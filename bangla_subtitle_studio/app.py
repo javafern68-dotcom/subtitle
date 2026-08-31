@@ -19,10 +19,11 @@ from .models import ColorSettings, Project, SubtitleSegment
 from .subtitles import format_srt_time, parse_srt, parse_timecode, write_srt
 from .transcription import transcribe_video
 from .translation import shift_segments, shift_segments_earlier, translate_segments
+from .voice_translate import create_voice_translated_video
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "2.6.0"
+APP_VERSION = "3.0.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -47,6 +48,9 @@ LANGUAGES = {
     "中文 (Chinese)": "zh",
     "日本語 (Japanese)": "ja",
     "한국어 (Korean)": "ko",
+}
+VOICE_LANGUAGES = {
+    label: code for label, code in LANGUAGES.items() if code != "avro"
 }
 class ScrollableTab(ttk.Frame):
     def __init__(self, parent: tk.Misc) -> None:
@@ -149,6 +153,12 @@ class BanglaSubtitleStudio(tk.Tk):
             value="✓ সম্পূর্ণ Offline • API Key ও Internet লাগবে না • প্রতি ভিডিও ০ টাকা"
         )
         self.language_var = tk.StringVar(value="বাংলা (বাংলা অক্ষর)")
+        self.voice_source_var = tk.StringVar(value="বাংলা (বাংলা অক্ষর)")
+        self.voice_target_var = tk.StringVar(value="English")
+        self.voice_gender_var = tk.StringVar(value="নারী কণ্ঠ")
+        self.voice_original_volume_var = tk.DoubleVar(value=0.0)
+        self.voice_add_subtitles_var = tk.BooleanVar(value=True)
+        self.voice_output_var = tk.StringVar(value="")
         self.subtitle_lead_var = tk.DoubleVar(value=0.35)
         self.sync_step_var = tk.DoubleVar(value=0.10)
         self.sync_status_var = tk.StringVar(value="বর্তমান পরিবর্তন: 0.00 সেকেন্ড")
@@ -220,16 +230,19 @@ class BanglaSubtitleStudio(tk.Tk):
         self.notebook = ttk.Notebook(controls_panel)
         self.notebook.pack(fill="both", expand=True)
         self.subtitle_tab = ttk.Frame(self.notebook, style="Panel.TFrame", padding=10)
+        self.voice_tab = ScrollableTab(self.notebook)
         self.style_tab = ScrollableTab(self.notebook)
         self.logo_tab = ScrollableTab(self.notebook)
         self.color_tab = ScrollableTab(self.notebook)
         self.export_tab = ScrollableTab(self.notebook)
         self.notebook.add(self.subtitle_tab, text="সাবটাইটেল")
+        self.notebook.add(self.voice_tab, text="Voice Translate")
         self.notebook.add(self.style_tab, text="স্টাইল")
         self.notebook.add(self.logo_tab, text="লোগো")
         self.notebook.add(self.color_tab, text="কালার")
         self.notebook.add(self.export_tab, text="Export")
         self._build_subtitle_tab()
+        self._build_voice_tab(self.voice_tab.body)
         self._build_style_tab(self.style_tab.body)
         self._build_logo_tab(self.logo_tab.body)
         self._build_color_tab(self.color_tab.body)
@@ -330,6 +343,101 @@ class BanglaSubtitleStudio(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         self.subtitle_tree.bind("<Double-1>", lambda _event: self.edit_segment())
         self.subtitle_tree.bind("<<TreeviewSelect>>", self._select_segment)
+
+    def _build_voice_tab(self, parent: tk.Misc) -> None:
+        language_card = self._section(parent, "Multilanguage Voice Translate / Dubbing")
+        ttk.Label(
+            language_card,
+            text="বাংলা ↔ English ↔ Hindi ↔ Arabicসহ সমর্থিত ভাষার voice পরিবর্তন করুন।",
+            style="Muted.TLabel",
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(0, 8))
+        ttk.Label(
+            language_card,
+            text="Natural voice-এর জন্য Internet লাগবে • API key বা প্রতি ভিডিওর টাকা লাগবে না",
+            foreground="#65E6A3",
+            background="#1B2940",
+            font=("Nirmala UI", 9, "bold"),
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(0, 10))
+        ttk.Label(language_card, text="মূল voice-এর ভাষা", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Combobox(
+            language_card,
+            textvariable=self.voice_source_var,
+            values=list(VOICE_LANGUAGES),
+            state="readonly",
+        ).pack(fill="x", pady=(3, 9))
+        ttk.Label(language_card, text="নতুন voice-এর ভাষা", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Combobox(
+            language_card,
+            textvariable=self.voice_target_var,
+            values=list(VOICE_LANGUAGES),
+            state="readonly",
+        ).pack(fill="x", pady=(3, 9))
+        ttk.Label(language_card, text="নতুন কণ্ঠ", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Combobox(
+            language_card,
+            textvariable=self.voice_gender_var,
+            values=["নারী কণ্ঠ", "পুরুষ কণ্ঠ"],
+            state="readonly",
+        ).pack(fill="x", pady=(3, 4))
+
+        audio_card = self._section(parent, "নতুন voice ও সময়")
+        ttk.Label(
+            audio_card,
+            text="প্রতিটি অনুবাদ করা বাক্যের voice মূল কথার শুরু, শেষ ও বিরতির সঙ্গে মেলানো হবে।",
+            style="Muted.TLabel",
+            wraplength=390,
+        ).pack(anchor="w", fill="x")
+        self._labeled_scale(
+            audio_card,
+            "পুরোনো অডিও Volume (%)",
+            self.voice_original_volume_var,
+            0,
+            30,
+            lambda: None,
+        )
+        ttk.Label(
+            audio_card,
+            text="০% রাখলে মূল ভাষার voice সম্পূর্ণ বন্ধ থাকবে।",
+            style="Muted.TLabel",
+            wraplength=390,
+        ).pack(anchor="w", pady=(4, 8))
+        ttk.Checkbutton(
+            audio_card,
+            text="Translated লেখাগুলো Subtitle হিসেবে প্রস্তুত রাখুন",
+            variable=self.voice_add_subtitles_var,
+        ).pack(anchor="w", pady=3)
+
+        output_card = self._section(parent, "Translated Voice Video")
+        ttk.Label(output_card, text="Output MP4 file", style="CardTitle.TLabel").pack(anchor="w")
+        output_row = ttk.Frame(output_card, style="Card.TFrame")
+        output_row.pack(fill="x", pady=(4, 10))
+        ttk.Entry(output_row, textvariable=self.voice_output_var).pack(side="left", fill="x", expand=True)
+        ttk.Button(output_row, text="...", width=4, command=self.choose_voice_output).pack(side="left", padx=(4, 0))
+        voice_actions = ttk.Frame(output_card, style="Card.TFrame")
+        voice_actions.pack(fill="x")
+        self.voice_translate_button = ttk.Button(
+            voice_actions,
+            text="Voice Translate শুরু করুন",
+            style="Accent.TButton",
+            command=self.start_voice_translation,
+        )
+        self.voice_translate_button.pack(side="left", fill="x", expand=True)
+        self.voice_cancel_button = ttk.Button(
+            voice_actions,
+            text="বাতিল",
+            style="Danger.TButton",
+            command=self.cancel_task,
+            state="disabled",
+        )
+        self.voice_cancel_button.pack(side="left", padx=(6, 0))
+        ttk.Label(
+            output_card,
+            text="কাজ শেষে translated video-টি বর্তমান ভিডিও হবে এবং Subtitle tab-এ অনুবাদের লেখা পাওয়া যাবে।",
+            style="Muted.TLabel",
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(9, 0))
 
     def _build_style_tab(self, parent: tk.Misc) -> None:
         card = self._section(parent, "ফন্ট ও লেখা")
@@ -479,6 +587,10 @@ class BanglaSubtitleStudio(tk.Tk):
         self.project.fps = float(info["fps"])
         self.project.output_path = self.project.default_output_path()
         self.output_var.set(self.project.output_path)
+        target_code = VOICE_LANGUAGES.get(self.voice_target_var.get(), "en")
+        self.voice_output_var.set(
+            str(Path(path).with_name(f"{Path(path).stem}_{target_code}_voice.mp4"))
+        )
         self.current_time = 0.0
         self.seek_var.set(0.0)
         self.seek_scale.configure(to=max(0.1, self.project.duration))
@@ -881,7 +993,9 @@ class BanglaSubtitleStudio(tk.Tk):
         state = "disabled" if value else "normal"
         self.generate_button.configure(state=state)
         self.export_button.configure(state=state)
+        self.voice_translate_button.configure(state=state)
         self.cancel_button.configure(state="normal" if value else "disabled")
+        self.voice_cancel_button.configure(state="normal" if value else "disabled")
         if not value:
             self.progress_var.set(0)
 
@@ -1117,6 +1231,148 @@ class BanglaSubtitleStudio(tk.Tk):
         path = filedialog.asksaveasfilename(title="Final video Save", defaultextension=".mp4", initialfile=initial, filetypes=[("MP4 Video", "*.mp4")])
         if path:
             self.output_var.set(path)
+
+    def choose_voice_output(self) -> None:
+        if self.voice_output_var.get().strip():
+            initial = Path(self.voice_output_var.get()).name
+        elif self.project.video_path:
+            target = VOICE_LANGUAGES.get(self.voice_target_var.get(), "en")
+            initial = f"{Path(self.project.video_path).stem}_{target}_voice.mp4"
+        else:
+            initial = "translated_voice_video.mp4"
+        path = filedialog.asksaveasfilename(
+            title="Translated Voice Video Save",
+            defaultextension=".mp4",
+            initialfile=initial,
+            filetypes=[("MP4 Video", "*.mp4")],
+        )
+        if path:
+            self.voice_output_var.set(path)
+
+    def start_voice_translation(self) -> None:
+        if self.busy:
+            return
+        if not self.project.video_path:
+            messagebox.showinfo(APP_NAME, "প্রথমে একটি ভিডিও দিন।", parent=self)
+            return
+        source = VOICE_LANGUAGES.get(self.voice_source_var.get(), "bn")
+        target = VOICE_LANGUAGES.get(self.voice_target_var.get(), "en")
+        if source == target:
+            messagebox.showerror(
+                APP_NAME,
+                "মূল voice ও নতুন voice-এর ভাষা আলাদা নির্বাচন করুন।",
+                parent=self,
+            )
+            return
+        output = self.voice_output_var.get().strip()
+        if not output:
+            output = str(
+                Path(self.project.video_path).with_name(
+                    f"{Path(self.project.video_path).stem}_{target}_voice.mp4"
+                )
+            )
+        if not output.lower().endswith(".mp4"):
+            output += ".mp4"
+        if Path(output).resolve() == Path(self.project.video_path).resolve():
+            messagebox.showerror(
+                APP_NAME,
+                "মূল ভিডিওর ওপর Voice Translate করা যাবে না। অন্য output নাম দিন।",
+                parent=self,
+            )
+            return
+        self.voice_output_var.set(output)
+        gender = "Male" if self.voice_gender_var.get() == "পুরুষ কণ্ঠ" else "Female"
+        original_volume = max(0.0, min(30.0, self.voice_original_volume_var.get())) / 100.0
+        keep_subtitles = self.voice_add_subtitles_var.get()
+        source_video = self.project.video_path
+        source_duration = self.project.duration
+        self._set_busy(True)
+        self.busy_cancel.clear()
+
+        def progress(value: float, message: str) -> None:
+            self.after(0, lambda: self._update_progress(value, message))
+
+        def worker() -> None:
+            try:
+                segments = create_voice_translated_video(
+                    video_path=source_video,
+                    duration=source_duration,
+                    source_language=source,
+                    target_language=target,
+                    gender=gender,
+                    output_path=output,
+                    original_volume=original_volume,
+                    progress=progress,
+                    cancel_event=self.busy_cancel,
+                )
+                self.after(
+                    0,
+                    lambda: self._finish_voice_translation(
+                        output,
+                        segments if keep_subtitles else [],
+                        target,
+                        None,
+                    ),
+                )
+            except Exception as exc:
+                self.after(
+                    0,
+                    lambda error=exc: self._finish_voice_translation(
+                        output, [], target, error
+                    ),
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_voice_translation(
+        self,
+        output: str,
+        segments: list[SubtitleSegment],
+        target_language: str,
+        error: Exception | None,
+    ) -> None:
+        self._set_busy(False)
+        if error:
+            self.status_var.set(str(error))
+            messagebox.showerror("Voice Translate হয়নি", str(error), parent=self)
+            return
+        try:
+            info = probe_video(output)
+        except MediaError as exc:
+            self.status_var.set(str(exc))
+            messagebox.showerror(APP_NAME, str(exc), parent=self)
+            return
+        self.stop_playback()
+        self.project.video_path = output
+        self.project.duration = float(info["duration"])
+        self.project.width = int(info["width"])
+        self.project.height = int(info["height"])
+        self.project.fps = float(info["fps"])
+        self.project.subtitles = segments
+        self.project.output_path = self.project.default_output_path()
+        self.output_var.set(self.project.output_path)
+        self.current_time = 0.0
+        self.seek_var.set(0.0)
+        self.seek_scale.configure(to=max(0.1, self.project.duration))
+        self.video_name_var.set(
+            f"{Path(output).name}  •  {self.project.width}×{self.project.height}"
+        )
+        self._capture_sync_baseline()
+        self._refresh_subtitle_tree()
+        self._update_time_label()
+        self.request_preview(0.0)
+        self.progress_var.set(100)
+        language_name = next(
+            (name for name, code in VOICE_LANGUAGES.items() if code == target_language),
+            target_language,
+        )
+        self.status_var.set(f"{language_name} translated voice video তৈরি হয়েছে।")
+        messagebox.showinfo(
+            APP_NAME,
+            "Voice Translate সম্পন্ন হয়েছে।\n\n"
+            "Translated video এখন Preview-তে আছে। Subtitle রাখা থাকলে Style ঠিক করে Export করুন।",
+            parent=self,
+        )
 
     def start_export(self) -> None:
         if self.busy:

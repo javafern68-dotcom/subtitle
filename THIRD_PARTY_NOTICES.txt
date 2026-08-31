@@ -16,6 +16,11 @@ Source: https://huggingface.co/ggml-org/whisper-vad
 File: ggml-silero-v6.2.0.bin
 License: MIT
 
+Multilingual Whisper Small Q5_1 model for Voice Translate source speech
+Source: https://huggingface.co/ggerganov/whisper.cpp
+Based on OpenAI Whisper: https://github.com/openai/whisper
+License: MIT
+
 M2M100 418M multilingual translation model
 Runtime model: CTranslate2 INT8 conversion bundled by the build
 Source: https://huggingface.co/facebook/m2m100_418M
@@ -25,6 +30,14 @@ License: MIT
 avro.py Bengali phonetic transliteration
 Source: https://github.com/hitblast/avro.py
 License: MIT or Apache-2.0
+
+edge-tts online natural speech client
+Copyright (c) rany and contributors
+Source: https://github.com/rany2/edge-tts
+License: GNU Lesser General Public License v3 (LGPLv3), except its separately
+identified MIT-licensed SRT composer.
+Voice Translate uses the online text-to-speech service exposed to Microsoft
+Edge. Internet access is required; no API key is requested by this software.
 
 FFmpeg
 Source: https://ffmpeg.org/

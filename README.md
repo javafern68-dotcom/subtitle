@@ -1,8 +1,20 @@
-# Bangla Subtitle Studio V2.6 Sync and Avro
+# Bangla Subtitle Studio V3.0 Voice Translate
 
-Windows desktop software for creating timed subtitles from Bengali speech, translating them completely offline, editing subtitle text and style, placing a logo, adjusting video color, and exporting a new MP4.
+Windows desktop software for creating timed subtitles, translating spoken audio into a new natural-language voice, editing subtitle style, placing a logo, adjusting video color, and exporting a new MP4.
 
-## What changed in V2.6
+## What changed in V3.0
+
+- Adds a separate Multilanguage Voice Translate / Dubbing tab.
+- Source and target voice languages are selected independently: Bengali, English, Hindi, Arabic, Urdu and the other existing languages are available.
+- Examples include Hindi voice to Bengali voice, Bengali voice to English/Hindi/Arabic voice, Arabic voice to Bengali voice, and English voice to Bengali voice.
+- A verified multilingual Whisper Small Q5_1 model recognizes non-Bengali source speech locally.
+- M2M100 performs source-to-target translation locally and back-translates candidates to protect meaning.
+- Natural male or female target speech is generated online without an API key and fitted sentence-by-sentence to the original timing and pauses.
+- Original audio volume is adjustable from 0% to 30%; 0% fully replaces the original spoken audio.
+- Translated text can automatically remain as timed subtitles for styling and final export.
+- The packaged Windows app must pass a complete Hindi-voice-to-Bengali-voice video test before release.
+
+## Subtitle improvements retained from V2.6
 
 - Avro/Banglish now contains Roman letters only; Bengali is no longer repeated underneath it.
 - Every Avro and English word starts with a capital letter, for example `Bismillahir Rahmanir Rahim`.
@@ -34,11 +46,11 @@ Windows desktop software for creating timed subtitles from Bengali speech, trans
 - The AI engine and model are included in the Windows installer.
 - Existing subtitle editing, SRT, logo, color, project, preview, and export features remain available.
 
-The offline installer contains the more accurate 424 MB Bengali speech model, a small VAD model, and the multilingual translation model. Bengali Unicode and Avro output are fastest because they do not need neural translation. Other target languages take longer because the software checks meaning by back-translation. Processing speed depends on the computer's CPU. The video and extracted audio remain on the computer.
+The installer contains the more accurate 424 MB Bengali speech model, a multilingual source-speech model, a small VAD model, and the multilingual translation model. Bengali Unicode and Avro output are fastest because they do not need neural translation. Other target languages take longer because the software checks meaning by back-translation. Processing speed depends on the computer's CPU. Video and extracted audio remain on the computer; Voice Translate sends only the already translated text to the online natural-voice service.
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe` from the `v2.6.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe` from the `v3.0.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 
@@ -48,11 +60,13 @@ The GitHub Actions workflow builds and bundles:
 - FFmpeg, FFprobe, and FFplay
 - statically built `whisper.cpp` CLI
 - verified `ggml-bengali-medium-q4_0.bin` Bengali fine-tuned model
+- verified `ggml-small-q5_1.bin` multilingual source-speech model
 - verified Silero V6.2 Voice Activity Detection model
 - bundled INT8 M2M100 translation model covering 100 languages
 - bundled Avro/Banglish reverse transliteration
 - real Bengali speech test that must produce Bengali Unicode text and a readable timed SRT
 - packaged Bengali greeting-to-Hindi and English semantic translation tests
+- packaged full Hindi-voice-to-Bengali-voice video test using an online natural target voice
 - Inno Setup installer and SHA-256 checksum
 
 Complete Bangla usage instructions: [README_BN.md](README_BN.md)

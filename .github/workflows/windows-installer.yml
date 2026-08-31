@@ -66,7 +66,7 @@ jobs:
           Copy-Item $cli.FullName "tools\whisper\whisper-cli.exe"
           Get-ChildItem $cli.Directory.FullName -Filter "*.dll" | Copy-Item -Destination "tools\whisper" -ErrorAction SilentlyContinue
 
-      - name: Download verified Accurate Bangla AI and VAD models
+      - name: Download verified Bangla, Multilingual and VAD models
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -78,6 +78,13 @@ jobs:
           $expectedHash = "6ccc65d58a7915f8d9a6d3d45ec2d6d10c784bd2c7b40a5a6b053712040b51d1"
           $actualHash = (Get-FileHash $model -Algorithm SHA256).Hash.ToLower()
           if ($actualHash -ne $expectedHash) { throw "Offline model checksum mismatch: $actualHash" }
+          $multilingualModel = "models\ggml-small-q5_1.bin"
+          curl.exe -L --fail --retry 3 --retry-delay 5 `
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin?download=true" `
+            -o $multilingualModel
+          $expectedMultilingualHash = "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb"
+          $actualMultilingualHash = (Get-FileHash $multilingualModel -Algorithm SHA256).Hash.ToLower()
+          if ($actualMultilingualHash -ne $expectedMultilingualHash) { throw "Multilingual model checksum mismatch: $actualMultilingualHash" }
           $vadModel = "models\ggml-silero-v6.2.0.bin"
           curl.exe -L --fail --retry 3 --retry-delay 5 `
             "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin?download=true" `
@@ -111,10 +118,12 @@ jobs:
             --icon "app.ico" `
             --additional-hooks-dir "pyinstaller_hooks" `
             --collect-all avro `
+            --collect-all edge_tts `
             --collect-all ctranslate2 `
             --collect-all sentencepiece `
             --collect-data transformers `
             --copy-metadata transformers `
+            --copy-metadata edge-tts `
             --hidden-import "transformers.models.m2m_100" `
             --hidden-import "transformers.models.m2m_100.tokenization_m2m_100" `
             --add-binary "tools\ffmpeg.exe;tools" `
@@ -132,6 +141,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$app\licenses" | Out-Null
           Copy-Item "tools\whisper\*" "$app\tools\whisper" -Recurse -Force
           Copy-Item "models\ggml-bengali-medium-q4_0.bin" "$app\models\ggml-bengali-medium-q4_0.bin"
+          Copy-Item "models\ggml-small-q5_1.bin" "$app\models\ggml-small-q5_1.bin"
           Copy-Item "models\ggml-silero-v6.2.0.bin" "$app\models\ggml-silero-v6.2.0.bin"
           Copy-Item "models\m2m100-418M-int8" "$app\models\m2m100-418M-int8" -Recurse -Force
           Copy-Item "THIRD_PARTY_NOTICES.txt" "$app\licenses\THIRD_PARTY_NOTICES.txt"
@@ -146,6 +156,7 @@ jobs:
           if (!(Test-Path "$app\_internal\tools\ffmpeg.exe") -and !(Test-Path "$app\tools\ffmpeg.exe")) { throw "FFmpeg missing" }
           if (!(Test-Path "$app\tools\whisper\whisper-cli.exe")) { throw "Offline Whisper engine missing" }
           if (!(Test-Path "$app\models\ggml-bengali-medium-q4_0.bin")) { throw "Accurate Offline model missing" }
+          if (!(Test-Path "$app\models\ggml-small-q5_1.bin")) { throw "Multilingual Voice model missing" }
           if (!(Test-Path "$app\models\ggml-silero-v6.2.0.bin")) { throw "Voice Activity Detection model missing" }
           if (!(Test-Path "$app\models\m2m100-418M-int8\model.bin")) { throw "Offline Translation model missing" }
           & "$app\tools\whisper\whisper-cli.exe" --version
@@ -154,6 +165,8 @@ jobs:
           if ($modelHash -ne "6ccc65d58a7915f8d9a6d3d45ec2d6d10c784bd2c7b40a5a6b053712040b51d1") { throw "Bundled model verification failed" }
           $vadHash = (Get-FileHash "$app\models\ggml-silero-v6.2.0.bin" -Algorithm SHA256).Hash.ToLower()
           if ($vadHash -ne "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987") { throw "Bundled VAD model verification failed" }
+          $multilingualHash = (Get-FileHash "$app\models\ggml-small-q5_1.bin" -Algorithm SHA256).Hash.ToLower()
+          if ($multilingualHash -ne "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb") { throw "Bundled multilingual model verification failed" }
           curl.exe -L --fail --retry 3 --retry-delay 5 `
             "https://huggingface.co/bangla-speech-processing/BanglaASR/resolve/main/mp3/common_voice_bn_31515636.mp3?download=true" `
             -o "bangla-smoke.mp3"
@@ -169,6 +182,18 @@ jobs:
           $translationTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList "--translation-self-test" -Wait -PassThru
           if ($translationTest.ExitCode -ne 0) { throw "Packaged Hindi, English or Roman-only Avro self-test failed" }
           Write-Host "Verified packaged Hindi/English meaning and Roman-only Avro formatting"
+          $env:PYTHONUTF8 = "1"
+          @'
+          from bangla_subtitle_studio.voice_translate import _online_voice, _save_speech
+          voice = _online_voice("hi", "Female")
+          _save_speech("\u0906\u092a \u0915\u0948\u0938\u0947 \u0939\u0948\u0902?", voice, "hindi-voice-smoke.mp3")
+          '@ | python -
+          & "$app\_internal\tools\ffmpeg.exe" -y -hide_banner -loglevel error -f lavfi -i "color=c=0x14213d:s=640x360:r=25" -i "hindi-voice-smoke.mp3" -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest "hindi-voice-smoke.mp4"
+          if ($LASTEXITCODE -ne 0) { throw "Hindi source voice video creation failed" }
+          $voiceTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList @("--voice-translate-self-test", "hindi-voice-smoke.mp4", "bengali-dub-smoke.mp4") -Wait -PassThru
+          if ($voiceTest.ExitCode -ne 0) { throw "Packaged Hindi-to-Bengali Voice Translate self-test failed" }
+          if (!(Test-Path "bengali-dub-smoke.mp4")) { throw "Bengali dubbed smoke video missing" }
+          Write-Host "Verified full Hindi voice to Bengali voice video pipeline"
           Get-ChildItem $app -Recurse | Measure-Object -Property Length -Sum
 
       - name: Install Inno Setup
@@ -179,12 +204,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -192,30 +217,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v2.6.0"
+          $tag = "v3.0.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe" `
-              "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe" `
+              "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V2.6 Sync and Avro" `
-              --notes "Adds a language-independent Global Sync controller that moves the complete subtitle earlier or later in 0.05-2.00 second steps, outputs Avro/Banglish as one Roman-only line without Bengali underneath, capitalizes the first letter of every Avro and English word, joins short speech fragments into a complete sentence, adds the requested Bismillah phrase comma, and increases native ASR line length so phrases are not cut in the middle. The accurate V2.2 Bengali Medium model, VAD timing, meaning-checked offline translation, all previous languages, logo, color and export tools remain. No API key, Internet, subscription, or per-video cost. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V3.0 Voice Translate" `
+              --notes "Adds a separate Multilanguage Voice Translate tab. Select the source voice language and target voice language to create Bengali, English, Hindi, Arabic, Urdu and other dubbed videos. A bundled multilingual Whisper model recognizes non-Bengali source speech, the existing offline M2M100 model meaning-checks the translation, and online natural male/female speech is fitted sentence-by-sentence to the original timing. Original audio volume is adjustable and translated text can be kept as ready subtitles for styling/export. The full Hindi-voice-to-Bengali-voice video pipeline is tested in the packaged Windows app. Natural voice generation requires Internet but no API key; all existing V2.6 subtitle, Roman-only Avro, Global Sync, logo, color and export features remain. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe" `
-              "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe" `
+              "installer\Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Sync-Avro-Setup-V2.6
+          name: Bangla-Subtitle-Studio-Voice-Translate-Setup-V3.0
           path: |
-            installer/Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe
-            installer/Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.sha256.txt
+            installer/Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.exe
+            installer/Bangla_Subtitle_Studio_Voice_Translate_Setup_V3.0.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

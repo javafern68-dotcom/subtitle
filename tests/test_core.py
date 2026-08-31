@@ -21,11 +21,17 @@ from bangla_subtitle_studio.subtitles import (
     write_srt,
 )
 from bangla_subtitle_studio.transcription import (
+    MULTILINGUAL_MODEL_NAME,
     OFFLINE_MODEL_NAME,
     VAD_MODEL_NAME,
     _WHISPER_PROGRESS_RE,
     build_whisper_command,
     transcribe_audio_file,
+)
+from bangla_subtitle_studio.voice_translate import (
+    _atempo_expression,
+    _select_voice,
+    create_voice_translated_video,
 )
 from bangla_subtitle_studio.translation import (
     _preserve_greeting,
@@ -174,6 +180,19 @@ class OfflineTranscriptionTests(unittest.TestCase):
         self.assertNotIn("--carry-initial-prompt", command)
         self.assertNotIn("api.openai.com", " ".join(command))
 
+    def test_multilingual_voice_command_keeps_selected_source_language(self) -> None:
+        command = build_whisper_command(
+            "whisper-cli.exe",
+            MULTILINGUAL_MODEL_NAME,
+            "audio.wav",
+            "subtitle",
+            "hi",
+            vad_model_path="vad.bin",
+            force_bengali=False,
+        )
+        self.assertEqual(command[command.index("-l") + 1], "hi")
+        self.assertEqual(MULTILINGUAL_MODEL_NAME, "ggml-small-q5_1.bin")
+
     def test_live_progress_output_is_detected(self) -> None:
         output = b"whisper_print_progress_callback: progress =  42%\r"
         self.assertEqual(_WHISPER_PROGRESS_RE.findall(output), [b"42"])
@@ -242,6 +261,12 @@ class TranslationAndSyncTests(unittest.TestCase):
         self.assertEqual(result[0].text, "বাংলা পরীক্ষা")
         self.assertEqual(result[0].secondary_text, "")
 
+    def test_same_non_bengali_source_and_target_is_preserved(self) -> None:
+        source = [SubtitleSegment(0, 2, "आप कैसे हैं", "old")]
+        result = translate_segments(source, "hi", source_language="hi")
+        self.assertEqual(result[0].text, "आप कैसे हैं")
+        self.assertEqual(result[0].secondary_text, "")
+
     def test_avro_output_is_title_case_without_bangla_second_line(self) -> None:
         fake_avro = types.SimpleNamespace(reverse_iter=lambda _items: ["ami banglay gan gai."])
         with mock.patch.dict(sys.modules, {"avro": fake_avro}):
@@ -294,6 +319,57 @@ class UIRegressionTests(unittest.TestCase):
         self.assertIn("self._adjust_global_sync(-1)", source)
         self.assertIn("self._adjust_global_sync(1)", source)
         self.assertIn("command=self._reset_global_sync", source)
+
+    def test_ui_has_multilanguage_voice_translate_tab(self) -> None:
+        source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
+        self.assertIn('self.notebook.add(self.voice_tab, text="Voice Translate")', source)
+        self.assertIn("মূল voice-এর ভাষা", source)
+        self.assertIn("নতুন voice-এর ভাষা", source)
+        self.assertIn("create_voice_translated_video", source)
+
+
+class VoiceTranslationTests(unittest.TestCase):
+    def test_preferred_bengali_female_voice_is_selected(self) -> None:
+        voices = [
+            {"Locale": "bn-BD", "Gender": "Female", "ShortName": "bn-BD-OtherNeural"},
+            {"Locale": "bn-BD", "Gender": "Female", "ShortName": "bn-BD-NabanitaNeural"},
+        ]
+        self.assertEqual(_select_voice(voices, "bn", "Female"), "bn-BD-NabanitaNeural")
+
+    def test_long_voice_speed_uses_safe_atempo_chain(self) -> None:
+        self.assertEqual(
+            _atempo_expression(4.5),
+            "atempo=2.00000,atempo=2.00000,atempo=1.12500",
+        )
+
+    @mock.patch("bangla_subtitle_studio.voice_translate._mux_dubbed_video")
+    @mock.patch("bangla_subtitle_studio.voice_translate._build_timed_voice_track")
+    @mock.patch("bangla_subtitle_studio.voice_translate._online_voice", return_value="en-US-JennyNeural")
+    @mock.patch("bangla_subtitle_studio.voice_translate.translate_segments")
+    @mock.patch("bangla_subtitle_studio.voice_translate.transcribe_video")
+    def test_hindi_voice_can_become_english_voice(
+        self,
+        transcribe: mock.Mock,
+        translate: mock.Mock,
+        _voice: mock.Mock,
+        _track: mock.Mock,
+        mux: mock.Mock,
+    ) -> None:
+        transcribe.return_value = [SubtitleSegment(0, 2, "आप कैसे हैं")]
+        translate.return_value = [SubtitleSegment(0, 2, "How Are You")]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video = Path(temp_dir) / "hindi.mp4"
+            video.write_bytes(b"video")
+            output = str(Path(temp_dir) / "english.mp4")
+            result = create_voice_translated_video(
+                str(video), 2.0, "hi", "en", "Female", output
+            )
+        self.assertEqual(result[0].text, "How Are You")
+        self.assertTrue(transcribe.call_args.kwargs["multilingual"])
+        self.assertIn("हिंदी", transcribe.call_args.args[3])
+        self.assertEqual(translate.call_args.kwargs["source_language"], "hi")
+        self.assertEqual(translate.call_args.args[1], "en")
+        mux.assert_called_once()
 
 
 if __name__ == "__main__":
