@@ -36,10 +36,8 @@ from bangla_subtitle_studio.voice_translate import (
     create_voice_translated_video,
 )
 from bangla_subtitle_studio.translation import (
-    TranslationError,
-    _accurate_online_translate_text,
     _google_translate_text,
-    _mymemory_translate_text,
+    _google_translate_texts,
     _preserve_greeting,
     _select_semantic_candidate,
     _valid_target_script,
@@ -255,37 +253,21 @@ class TranslationAndSyncTests(unittest.TestCase):
         self.assertIn("sl=bn", urlopen.call_args.args[0].full_url)
         self.assertIn("tl=en", urlopen.call_args.args[0].full_url)
 
-    @mock.patch("bangla_subtitle_studio.translation.urllib.request.urlopen")
-    def test_mymemory_translation_is_the_second_online_provider(
-        self, urlopen: mock.Mock
+    @mock.patch("bangla_subtitle_studio.translation._google_translate_text")
+    def test_complete_video_sentences_use_one_online_request(
+        self, google: mock.Mock
     ) -> None:
-        response = mock.MagicMock()
-        response.__enter__.return_value.read.return_value = json.dumps(
-            {"responseData": {"translatedText": "আপনি কেমন আছেন?"}}
-        ).encode("utf-8")
-        urlopen.return_value = response
-        self.assertEqual(
-            _mymemory_translate_text("How are you?", "en", "bn"),
-            "আপনি কেমন আছেন?",
+        google.return_value = (
+            "[[[BSSSEG0000]]] How Are You?\n"
+            "[[[BSSSEG0001]]] I Am Fine."
         )
-        self.assertIn("api.mymemory.translated.net", urlopen.call_args.args[0].full_url)
-
-    @mock.patch(
-        "bangla_subtitle_studio.translation._mymemory_translate_text",
-        return_value="আপনি কেমন আছেন?",
-    )
-    @mock.patch(
-        "bangla_subtitle_studio.translation._google_translate_text",
-        side_effect=TranslationError("blocked"),
-    )
-    def test_accurate_translation_falls_back_after_google_failure(
-        self, _google: mock.Mock, memory: mock.Mock
-    ) -> None:
         self.assertEqual(
-            _accurate_online_translate_text("How are you?", "en", "bn"),
-            "আপনি কেমন আছেন?",
+            _google_translate_texts(
+                ["আপনি কেমন আছেন?", "আমি ভালো আছি।"], "bn", "en"
+            ),
+            ["How Are You?", "I Am Fine."],
         )
-        memory.assert_called_once_with("How are you?", "en", "bn")
+        google.assert_called_once()
 
     def test_semantic_reranking_prefers_meaning_preserving_translation(self) -> None:
         chosen = _select_semantic_candidate(

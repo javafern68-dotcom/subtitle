@@ -54,11 +54,6 @@ for higher-accuracy, faster cross-language translation. No API key is requested
 by this software. If that online request is unavailable or returns text in the
 wrong writing system, the bundled Offline M2M100 model is used automatically.
 
-MyMemory web translation fallback
-Source service: https://mymemory.translated.net/
-If Google text translation cannot be reached, Voice Translate can send the
-already transcribed sentence text to MyMemory before using the bundled Offline
-model. No API key is requested by this software for normal anonymous use.
 
 FFmpeg
 Source: https://ffmpeg.org/

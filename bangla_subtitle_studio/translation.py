@@ -60,7 +60,6 @@ _GOOGLE_TRANSLATE_ENDPOINTS = (
     "https://translate.googleapis.com/translate_a/single",
     "https://translate.google.com/translate_a/single",
 )
-_MYMEMORY_TRANSLATE_ENDPOINT = "https://api.mymemory.translated.net/get"
 _AVRO_BISMILLAH_RE = re.compile(
     r"^\s*বিসমিল্লাহির?\s+র[া]?হমান(?:ির|ের)\s+রাহিম",
     re.IGNORECASE,
@@ -240,46 +239,34 @@ def _google_translate_text(text: str, source: str, target: str) -> str:
     raise TranslationError("Online Accurate translation service পাওয়া যায়নি।") from last_error
 
 
-def _mymemory_translate_text(text: str, source: str, target: str) -> str:
-    parameters = {
-        "q": text,
-        "langpair": (
-            f"{_GOOGLE_LANGUAGE_CODES.get(source, source)}|"
-            f"{_GOOGLE_LANGUAGE_CODES.get(target, target)}"
-        ),
-    }
-    last_error: Exception | None = None
-    for attempt in range(2):
-        try:
-            request = urllib.request.Request(
-                _MYMEMORY_TRANSLATE_ENDPOINT + "?" + urllib.parse.urlencode(parameters),
-                headers={"User-Agent": "BanglaSubtitleStudio/3.1"},
-            )
-            with urllib.request.urlopen(request, timeout=15) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            translated = html.unescape(
-                str(payload.get("responseData", {}).get("translatedText", ""))
-            ).strip()
-            if _valid_target_script(text, translated, target):
-                return translated
-            raise TranslationError("MyMemory translation-এর ভাষার অক্ষর সঠিক হয়নি।")
-        except Exception as exc:
-            last_error = exc
-            if attempt == 0:
-                time.sleep(0.5)
-    raise TranslationError("MyMemory Accurate translation service পাওয়া যায়নি।") from last_error
-
-
-def _accurate_online_translate_text(text: str, source: str, target: str) -> str:
-    try:
-        return _google_translate_text(text, source, target)
-    except TranslationError as google_error:
-        try:
-            return _mymemory_translate_text(text, source, target)
-        except TranslationError as memory_error:
-            raise TranslationError(
-                "Google ও MyMemory Accurate translation পাওয়া যায়নি।"
-            ) from memory_error
+def _google_translate_texts(texts: list[str], source: str, target: str) -> list[str]:
+    if not texts:
+        return []
+    if len(texts) == 1:
+        return [_google_translate_text(texts[0], source, target)]
+    markers = [f"[[[BSSSEG{index:04d}]]]" for index in range(len(texts))]
+    combined = "\n".join(
+        f"{markers[index]} {value}" for index, value in enumerate(texts)
+    )
+    translated = _google_translate_text(combined, source, target)
+    marker_pattern = re.compile(r"\[\[\[\s*BSSSEG(\d{4})\s*\]\]\]", re.IGNORECASE)
+    matches = list(marker_pattern.finditer(translated))
+    if len(matches) != len(texts):
+        raise TranslationError("Online translation বাক্যের সীমা ঠিক রাখেনি।")
+    outputs = [""] * len(texts)
+    for match_index, match in enumerate(matches):
+        item_index = int(match.group(1))
+        if item_index < 0 or item_index >= len(texts):
+            raise TranslationError("Online translation বাক্যের নম্বর বদলে দিয়েছে।")
+        start = match.end()
+        end = matches[match_index + 1].start() if match_index + 1 < len(matches) else len(translated)
+        output = translated[start:end].strip()
+        if not _valid_target_script(texts[item_index], output, target):
+            raise TranslationError("Online translation-এর একটি বাক্য সঠিক ভাষায় নেই।")
+        outputs[item_index] = output
+    if any(not value for value in outputs):
+        raise TranslationError("Online translation-এর সব বাক্য পাওয়া যায়নি।")
+    return outputs
 
 
 def translate_voice_segments(
@@ -298,19 +285,38 @@ def translate_voice_segments(
         progress(0.02, "Accurate Online Translation প্রস্তুত হচ্ছে…")
     translated: list[str] = []
     try:
-        for index, item in enumerate(segments):
+        source_texts = [item.text.strip() for item in segments]
+        batches: list[tuple[int, list[str]]] = []
+        start = 0
+        while start < len(source_texts):
+            end = start
+            used = 0
+            while end < len(source_texts):
+                additional = len(source_texts[end]) + 24
+                if end > start and used + additional > 3_000:
+                    break
+                used += additional
+                end += 1
+            batches.append((start, source_texts[start:end]))
+            start = end
+        for batch_index, (batch_start, batch) in enumerate(batches):
             if cancel_event and cancel_event.is_set():
                 raise TranslationError("Voice Translation বাতিল করা হয়েছে।")
-            output = _accurate_online_translate_text(item.text.strip(), source, target)
-            output = _preserve_greeting(item.text, output, target)
-            if target == "en":
-                output = _title_case_latin_words(output)
-            translated.append(output)
+            outputs = _google_translate_texts(batch, source, target)
+            for local_index, output in enumerate(outputs):
+                source_text = batch[local_index]
+                output = _preserve_greeting(source_text, output, target)
+                if target == "en":
+                    output = _title_case_latin_words(output)
+                translated.append(output)
             if progress:
+                completed = batch_start + len(batch)
                 progress(
-                    (index + 1) / max(1, len(segments)),
-                    f"Accurate Online Translation—{index + 1}/{len(segments)} বাক্য",
+                    completed / max(1, len(segments)),
+                    f"Accurate Online Translation—{completed}/{len(segments)} বাক্য",
                 )
+            if batch_index + 1 < len(batches):
+                time.sleep(1.5)
         return [
             SubtitleSegment(item.start, item.end, translated[index], item.text)
             for index, item in enumerate(segments)

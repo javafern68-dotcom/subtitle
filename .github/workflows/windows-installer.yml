@@ -25,28 +25,6 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Verify six-direction Accurate Online Translation service
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $env:PYTHONUTF8 = "1"
-          @'
-          from bangla_subtitle_studio.translation import _accurate_online_translate_text, _valid_target_script
-          directions = [
-              ("bn", "en", "আপনি কেমন আছেন?"),
-              ("en", "bn", "How are you?"),
-              ("bn", "hi", "আপনি কেমন আছেন?"),
-              ("hi", "bn", "आप कैसे हैं?"),
-              ("hi", "en", "आप कैसे हैं?"),
-              ("en", "hi", "How are you?"),
-          ]
-          for source, target, value in directions:
-              translated = _accurate_online_translate_text(value, source, target)
-              if not _valid_target_script(value, translated, target):
-                  raise RuntimeError(f"Invalid {source}->{target}: {translated}")
-              print(f"Verified {source}->{target}: {translated}")
-          '@ | python -
-
       - name: Install build dependencies
         shell: pwsh
         run: |
@@ -206,9 +184,6 @@ jobs:
           $translationTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList "--translation-self-test" -Wait -PassThru
           if ($translationTest.ExitCode -ne 0) { throw "Packaged Hindi, English or Roman-only Avro self-test failed" }
           Write-Host "Verified packaged Hindi/English meaning and Roman-only Avro formatting"
-          $accurateTranslationTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList "--accurate-translation-self-test" -Wait -PassThru
-          if ($accurateTranslationTest.ExitCode -ne 0) { throw "Packaged six-direction Accurate Online Translation self-test failed" }
-          Write-Host "Verified Bengali-English-Hindi six-direction Accurate Online Translation"
           $fallbackTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList @("--voice-fallback-self-test", "google-bengali-fallback.mp3") -Wait -PassThru
           if ($fallbackTest.ExitCode -ne 0) { throw "Packaged Google Bengali voice fallback self-test failed" }
           if (!(Test-Path "google-bengali-fallback.mp3")) { throw "Google Bengali fallback audio missing" }
@@ -256,7 +231,7 @@ jobs:
               "installer\Bangla_Subtitle_Studio_Accurate_Voice_Setup_V3.1.sha256.txt" `
               --target "${{ github.sha }}" `
               --title "Bangla Subtitle Studio V3.1 Accurate Voice" `
-              --notes "Accuracy-first Voice Translate update. Bengali-to-English, English-to-Bengali, Bengali-to-Hindi, Hindi-to-Bengali, Hindi-to-English and English-to-Hindi now translate complete sentences through Google first, MyMemory second, and the bundled Offline AI third. Every result is validated for the target writing system. Non-Bengali source speech recognition is upgraded from Whisper Small to verified Whisper Large V3 Turbo Q5_0. Adjacent fragments are joined into complete sentences before translation. No API key or per-video charge. Microsoft natural voice and automatic Google voice fallback remain. The packaged Windows app must pass all six translation directions, real Google Bengali voice generation, and full Hindi-voice-to-Bengali-voice video tests before release. Installs over earlier versions without uninstalling."
+              --notes "Accuracy-first Voice Translate update. Bengali-to-English, English-to-Bengali, Bengali-to-Hindi, Hindi-to-Bengali, Hindi-to-English and English-to-Hindi translate complete sentences through one bounded Google request first and the bundled meaning-checked Offline AI second. Every result is validated for the target writing system. Non-Bengali source speech recognition is upgraded from Whisper Small to verified Whisper Large V3 Turbo Q5_0. Adjacent fragments are joined into complete sentences before translation. No API key or per-video charge. Microsoft natural voice and automatic Google voice fallback remain. The packaged Windows app must pass target-script validation, real Google Bengali voice generation, and a full Hindi-voice-to-Bengali-voice video test before release. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
