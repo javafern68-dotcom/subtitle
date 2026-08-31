@@ -15,6 +15,7 @@ from bangla_subtitle_studio.subtitles import (
     parse_srt,
     parse_srt_text,
     parse_timecode,
+    merge_short_segments,
     split_for_readability,
     write_ass,
     write_srt,
@@ -29,6 +30,9 @@ from bangla_subtitle_studio.transcription import (
 from bangla_subtitle_studio.translation import (
     _preserve_greeting,
     _select_semantic_candidate,
+    _format_avro_text,
+    _title_case_latin_words,
+    shift_segments,
     shift_segments_earlier,
     translate_segments,
 )
@@ -96,6 +100,20 @@ class SubtitleTests(unittest.TestCase):
         self.assertAlmostEqual(result[0].start, 0)
         self.assertAlmostEqual(result[-1].end, 12)
 
+    def test_short_asr_fragments_are_joined_as_one_sentence(self) -> None:
+        source = [
+            SubtitleSegment(0.0, 2.4, "বিসমিল্লাহির রহমানের রাহিম আপনারা"),
+            SubtitleSegment(2.45, 3.7, "কেমন আছেন"),
+        ]
+        result = merge_short_segments(source)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(
+            result[0].text,
+            "বিসমিল্লাহির রহমানের রাহিম, আপনারা কেমন আছেন",
+        )
+        self.assertAlmostEqual(result[0].start, 0.0)
+        self.assertAlmostEqual(result[0].end, 3.7)
+
 
 class ModelAndExportTests(unittest.TestCase):
     def test_project_json_shape(self) -> None:
@@ -152,7 +170,7 @@ class OfflineTranscriptionTests(unittest.TestCase):
         self.assertIn("--prompt", command)
         self.assertIn("--vad", command)
         self.assertIn("ggml-silero-v6.2.0.bin", command)
-        self.assertEqual(command[command.index("-ml") + 1], "42")
+        self.assertEqual(command[command.index("-ml") + 1], "84")
         self.assertNotIn("--carry-initial-prompt", command)
         self.assertNotIn("api.openai.com", " ".join(command))
 
@@ -208,20 +226,45 @@ class TranslationAndSyncTests(unittest.TestCase):
         self.assertEqual(result[1].start, 0.0)
         self.assertAlmostEqual(result[1].end, 0.15)
 
+    def test_global_sync_moves_every_language_together(self) -> None:
+        source = [
+            SubtitleSegment(1.0, 2.0, "বাংলা"),
+            SubtitleSegment(3.0, 4.0, "How Are You", "কেমন আছেন"),
+        ]
+        result = shift_segments(source, 0.25)
+        self.assertAlmostEqual(result[0].start, 1.25)
+        self.assertAlmostEqual(result[1].end, 4.25)
+        self.assertEqual(result[1].secondary_text, "কেমন আছেন")
+
     def test_bangla_output_is_preserved(self) -> None:
         source = [SubtitleSegment(0, 2, "বাংলা পরীক্ষা", "old")]
         result = translate_segments(source, "bn")
         self.assertEqual(result[0].text, "বাংলা পরীক্ষা")
         self.assertEqual(result[0].secondary_text, "")
 
-    def test_avro_output_keeps_bangla_as_second_line(self) -> None:
+    def test_avro_output_is_title_case_without_bangla_second_line(self) -> None:
         fake_avro = types.SimpleNamespace(reverse_iter=lambda _items: ["ami banglay gan gai."])
         with mock.patch.dict(sys.modules, {"avro": fake_avro}):
             result = translate_segments(
                 [SubtitleSegment(0, 2, "আমি বাংলায় গান গাই।")], "avro"
             )
-        self.assertEqual(result[0].text, "ami banglay gan gai.")
-        self.assertEqual(result[0].secondary_text, "আমি বাংলায় গান গাই।")
+        self.assertEqual(result[0].text, "Ami Banglay Gan Gai.")
+        self.assertEqual(result[0].secondary_text, "")
+
+    def test_every_english_word_starts_with_a_capital(self) -> None:
+        self.assertEqual(
+            _title_case_latin_words("bismillahir rahmanir rahim, how are you?"),
+            "Bismillahir Rahmanir Rahim, How Are You?",
+        )
+
+    def test_requested_bismillah_avro_spelling_is_exact(self) -> None:
+        self.assertEqual(
+            _format_avro_text(
+                "বিসমিল্লাহির রহমানের রাহিম",
+                "bismillahir rhamaner rahim",
+            ),
+            "Bismillahir Rahmanir Rahim",
+        )
 
 
 class UIRegressionTests(unittest.TestCase):
@@ -244,6 +287,13 @@ class UIRegressionTests(unittest.TestCase):
         self.assertIn('                    "bn",', source)
         self.assertNotIn('"Auto Detect": "auto"', source)
         self.assertIn('self.prompt_var = tk.StringVar(value="")', source)
+
+    def test_ui_has_language_independent_global_sync_controls(self) -> None:
+        source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
+        self.assertIn("সব Subtitle-এর Global Sync", source)
+        self.assertIn("self._adjust_global_sync(-1)", source)
+        self.assertIn("self._adjust_global_sync(1)", source)
+        self.assertIn("command=self._reset_global_sync", source)
 
 
 if __name__ == "__main__":

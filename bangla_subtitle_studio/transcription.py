@@ -13,7 +13,7 @@ from typing import Callable
 
 from .media import _startupinfo, extract_audio_chunk
 from .models import SubtitleSegment
-from .subtitles import parse_srt, split_for_readability
+from .subtitles import merge_short_segments, parse_srt, split_for_readability
 
 
 class TranscriptionError(RuntimeError):
@@ -92,8 +92,8 @@ def build_whisper_command(
         "-osrt",
         "-of",
         output_prefix,
-        "-ml",
-        "42",
+            "-ml",
+            "84",
         "-sow",
         "-np",
         "-pp",
@@ -302,4 +302,11 @@ def transcribe_video(
                     (index + 1) / total_parts,
                     f"Offline অংশ {index + 1}/{total_parts} সম্পন্ন",
                 )
-    return split_for_readability(combined, max_words=10, max_duration=5.0)
+    sentence_segments = merge_short_segments(
+        combined,
+        max_words=12,
+        max_chars=88,
+        max_duration=7.0,
+        max_gap=0.55,
+    )
+    return split_for_readability(sentence_segments, max_words=12, max_duration=7.0)

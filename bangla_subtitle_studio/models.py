@@ -32,7 +32,7 @@ class SubtitleStyle:
     background: bool = False
     position: str = "bottom"
     margin_v: int = 70
-    max_chars: int = 42
+    max_chars: int = 70
     show_secondary: bool = True
 
 
@@ -95,4 +95,3 @@ class Project:
             return ""
         source = Path(self.video_path)
         return str(source.with_name(f"{source.stem}_বাংলা_সাবটাইটেল.mp4"))
-

@@ -12,6 +12,11 @@ TIMECODE_RE = re.compile(
     r"(?:\s*[,.]\s*(?P<ms>\d{1,3}))?(?!\d)"
 )
 ARROW_RE = re.compile(r"\s*(?:-->|-+\s*>|→)\s*")
+_BISMILLAH_CONTINUATION_RE = re.compile(
+    r"(বিসমিল্লাহির?\s+রহমান(?:ির|ের)\s+রাহিম)(?!\s*[,，])(?=\s+\S)",
+    re.IGNORECASE,
+)
+_TERMINAL_PUNCTUATION = ("।", ".", "?", "!", "؟", "…")
 
 
 def parse_timecode(value: str) -> float:
@@ -217,3 +222,55 @@ def split_for_readability(
             end = item.start + (item.end - item.start) * word_end / len(words)
             result.append(SubtitleSegment(start, end, " ".join(words[word_start:word_end])))
     return [item for item in result if item.text.strip()]
+
+
+def _phrase_punctuation(text: str) -> str:
+    """Keep a familiar opening phrase attached to the sentence that follows it."""
+    clean = " ".join(text.replace("\n", " ").split())
+    return _BISMILLAH_CONTINUATION_RE.sub(r"\1,", clean)
+
+
+def merge_short_segments(
+    segments: list[SubtitleSegment],
+    max_words: int = 12,
+    max_chars: int = 88,
+    max_duration: float = 7.0,
+    max_gap: float = 0.55,
+) -> list[SubtitleSegment]:
+    """Join adjacent ASR fragments when they are clearly one short sentence."""
+    merged: list[SubtitleSegment] = []
+    for segment in segments:
+        item = segment.normalized()
+        item = SubtitleSegment(
+            item.start,
+            item.end,
+            _phrase_punctuation(item.text),
+            _phrase_punctuation(item.secondary_text) if item.secondary_text else "",
+        )
+        if not merged:
+            merged.append(item)
+            continue
+
+        previous = merged[-1]
+        gap = item.start - previous.end
+        combined_text = _phrase_punctuation(f"{previous.text} {item.text}")
+        combined_secondary = " ".join(
+            value for value in (previous.secondary_text, item.secondary_text) if value
+        )
+        can_join = (
+            -0.25 <= gap <= max_gap
+            and not previous.text.rstrip().endswith(_TERMINAL_PUNCTUATION)
+            and len(combined_text.split()) <= max_words
+            and len(combined_text) <= max_chars
+            and item.end - previous.start <= max_duration
+        )
+        if can_join:
+            merged[-1] = SubtitleSegment(
+                previous.start,
+                item.end,
+                combined_text,
+                combined_secondary,
+            )
+        else:
+            merged.append(item)
+    return merged

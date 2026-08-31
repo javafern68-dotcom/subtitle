@@ -11,12 +11,27 @@ def translation_self_test() -> None:
     source = [SubtitleSegment(0, 3, "আসসালামু আলাইকুম। সবাই কেমন আছেন?")]
     hindi_item = translate_segments(source, "hi")[0]
     english_item = translate_segments(source, "en")[0]
+    avro_item = translate_segments(
+        [SubtitleSegment(0, 3, "বিসমিল্লাহির রহমানির রাহিম")],
+        "avro",
+    )[0]
     hindi = hindi_item.text
     english = english_item.text.casefold()
     if not re.search(r"[\u0900-\u097F]", hindi) or not re.search(r"(?:आप|कैसे|सब)", hindi):
         raise RuntimeError(f"Hindi translation self-test failed: {hindi}")
     if "how" not in english or not re.search(r"(?:you|everyone|all)", english):
         raise RuntimeError(f"English translation self-test failed: {english_item.text}")
+    english_words = re.findall(r"[A-Za-z]+", english_item.text)
+    if not english_words or any(not word[0].isupper() for word in english_words):
+        raise RuntimeError(f"English title-case self-test failed: {english_item.text}")
+    avro_words = re.findall(r"[A-Za-z]+", avro_item.text)
+    if (
+        not avro_words
+        or any(not word[0].isupper() for word in avro_words)
+        or re.search(r"[\u0980-\u09FF]", avro_item.text)
+        or avro_item.secondary_text
+    ):
+        raise RuntimeError(f"Avro Roman-only self-test failed: {avro_item}")
     if hindi_item.start != source[0].start or english_item.end != source[0].end:
         raise RuntimeError("Translation changed subtitle timing")
 

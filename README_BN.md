@@ -1,8 +1,15 @@
-# Bangla Subtitle Studio V2.5 — নির্ভুল Multilanguage Subtitle
+# Bangla Subtitle Studio V2.6 — Global Sync ও Roman-only Avro
 
 বাংলা ভিডিও থেকে সময়সহ বাংলা সাবটাইটেল তৈরি, লেখা সংশোধন, স্টাইল পরিবর্তন, ভিডিওর ওপর লোগো বসানো, কালার ঠিক করা এবং নতুন MP4 Export করার Windows সফটওয়্যার।
 
 ## গুরুত্বপূর্ণ সুবিধা
+
+- Avro/Banglish নিলে শুধু Roman অক্ষরের এক লাইন থাকবে; নিচে বাংলা লেখা আর থাকবে না।
+- Avro ও English-এর প্রতিটি শব্দ বড় ইংরেজি অক্ষর দিয়ে শুরু হবে: `Bismillahir Rahmanir Rahim`।
+- নতুন `Global Sync` controller-এর `আগে` অথবা `পরে` বাটনে সম্পূর্ণ subtitle একসঙ্গে সরবে। নতুন করে Generate বা ভাষা নির্বাচন করতে হবে না।
+- প্রতি ক্লিকে কত সেকেন্ড সরবে তা ০.০৫–২.০০ সেকেন্ডের মধ্যে ঠিক করা যাবে এবং `Reset` করা যাবে।
+- ছোট ASR অংশ একই বাক্য হলে একত্র হবে: `বিসমিল্লাহির রহমানের রাহিম, আপনারা কেমন আছেন`।
+- কথার মাঝখানে line কাটার সমস্যা কমাতে speech line এবং ভিডিওতে দেখানোর line বড় করা হয়েছে।
 
 - V2.2-তে ভালো কাজ করা Bengali Medium Q4 model আবার ব্যবহার করা হয়েছে, তাই ভিডিও যা বলবে সেটিই যথাসম্ভব হুবহু বাংলায় লেখা হবে।
 - Voice Activity Detection ভিডিওর শুরু থেকেই মানুষের কথা খুঁজবে; music বা silence-এর কারণে এক মিনিট পরে subtitle শুরু হওয়ার সমস্যা কমাবে।
@@ -22,24 +29,25 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V2.5 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V2.6 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Offline Subtitle তৈরির নিয়ম
 
 ১. উপরের `ভিডিও দিন` বাটনে ক্লিক করে MP4/MOV/MKV/AVI/WebM ভিডিও দিন।  
 ২. `সাবটাইটেলের ভাষা` থেকে বাংলা, Avro/Banglish, Hindi, English, Arabic অথবা পছন্দের ভাষা নির্বাচন করুন।  
-৩. Subtitle দেরিতে এলে `Subtitle আগে দেখান` ০.৩৫ থেকে ০.৫০ করুন; বেশি আগে এলে কমিয়ে দিন।  
+৩. Generate-এর আগের default timing-এর জন্য `তৈরির সময় Subtitle আগে` ঠিক করুন।  
 ৪. বিশেষ কোনো নাম বা শব্দ থাকলে ঐচ্ছিক ঘরে লিখুন।  
 ৫. `Generate Subtitle` ক্লিক করুন।  
 ৬. কাজ চলার সময় software বন্ধ করবেন না। Internet চালু রাখার প্রয়োজন নেই।  
 ৭. তৈরি হওয়া কোনো লাইনে double-click করে লেখা বা সময় ঠিক করুন।
+৮. পুরো subtitle দেরিতে এলে `Global Sync` থেকে `আগে`, আর বেশি আগে এলে `পরে` চাপুন। এটি বাংলা, Avro, English, Hindi—সব ভাষাতেই কাজ করবে।
 
-Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V2.5-এ accuracy-কে অগ্রাধিকার দিয়ে V2.2-এর Bengali Medium model ব্যবহার করা হয়েছে, তাই V2.4 Fast model-এর চেয়ে কিছু সময় বেশি লাগতে পারে। বাংলা Unicode ও Avro সবচেয়ে দ্রুত; অন্য ভাষায় অর্থ যাচাই করার জন্য Translation-এ অতিরিক্ত সময় লাগবে। কাজ চলার সময় নিচের live সময় বাড়লে software কাজ করছে।
+Offline AI আপনার কম্পিউটারের CPU ব্যবহার করে। V2.6-এ accuracy-কে অগ্রাধিকার দিয়ে V2.2-এর Bengali Medium model ব্যবহার করা হয়েছে, তাই V2.4 Fast model-এর চেয়ে কিছু সময় বেশি লাগতে পারে। বাংলা Unicode ও Avro সবচেয়ে দ্রুত; অন্য ভাষায় অর্থ যাচাই করার জন্য Translation-এ অতিরিক্ত সময় লাগবে। কাজ চলার সময় নিচের live সময় বাড়লে software কাজ করছে।
 
 ## Subtitle Style
 
@@ -84,7 +92,7 @@ Manual controls: Brightness, Contrast, Saturation, Temperature ও Tint।
 - `Offline বাংলা AI model পাওয়া যায়নি`: V2 Offline installer আবার install করুন।
 - কাজ ধীরে হচ্ছে: নিচের “কাজ চলছে” সময় বাড়ছে কি না দেখুন, অন্য ভারী software বন্ধ করুন এবং কাজ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।
 - `পর্যাপ্ত RAM` বার্তা: অন্য software বন্ধ করে আবার চেষ্টা করুন।
-- `Offline subtitle পড়া যায়নি`: V2.5 আবার install করুন; SRT reader fix এই সংস্করণেও আছে।
+- `Offline subtitle পড়া যায়নি`: V2.6 আবার install করুন; SRT reader fix এই সংস্করণেও আছে।
 - বাংলা অক্ষর box দেখায়: Windows Settings থেকে Bengali language/font support install করুন।
 - কথা ভুল লিখেছে: background music কমানো বা পরিষ্কার audio ব্যবহার করা ভালো; ভুল line-এ double-click করে সংশোধন করুন।
 

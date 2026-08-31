@@ -158,7 +158,7 @@ jobs:
             "https://huggingface.co/bangla-speech-processing/BanglaASR/resolve/main/mp3/common_voice_bn_31515636.mp3?download=true" `
             -o "bangla-smoke.mp3"
           & "$app\_internal\tools\ffmpeg.exe" -y -hide_banner -loglevel error -i "bangla-smoke.mp3" -ar 16000 -ac 1 -c:a pcm_s16le "bangla-smoke.wav"
-          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-bengali-medium-q4_0.bin" -f "bangla-smoke.wav" -l bn -otxt -osrt -of "bangla-smoke" -ml 42 -sow -np --vad -vm "$app\models\ggml-silero-v6.2.0.bin" -vt 0.45 -vspd 120 -vsd 250 -vmsd 28 -vp 120 -vo 0.20
+          & "$app\tools\whisper\whisper-cli.exe" -m "$app\models\ggml-bengali-medium-q4_0.bin" -f "bangla-smoke.wav" -l bn -otxt -osrt -of "bangla-smoke" -ml 84 -sow -np --vad -vm "$app\models\ggml-silero-v6.2.0.bin" -vt 0.45 -vspd 120 -vsd 250 -vmsd 28 -vp 120 -vo 0.20
           if ($LASTEXITCODE -ne 0) { throw "Offline Bengali transcription smoke test failed" }
           $banglaText = Get-Content "bangla-smoke.txt" -Raw -Encoding UTF8
           if ($banglaText -notmatch '[\u0980-\u09FF]') { throw "The bundled model did not create Bengali-script text: $banglaText" }
@@ -167,8 +167,8 @@ jobs:
           if ($srtTest.ExitCode -ne 0) { throw "Packaged Bengali SRT reader self-test failed" }
           Write-Host "Verified actual Bengali SRT in packaged application"
           $translationTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList "--translation-self-test" -Wait -PassThru
-          if ($translationTest.ExitCode -ne 0) { throw "Packaged Bengali-to-Hindi Translation self-test failed" }
-          Write-Host "Verified packaged Bengali-to-Hindi Offline Translation"
+          if ($translationTest.ExitCode -ne 0) { throw "Packaged Hindi, English or Roman-only Avro self-test failed" }
+          Write-Host "Verified packaged Hindi/English meaning and Roman-only Avro formatting"
           Get-ChildItem $app -Recurse | Measure-Object -Property Length -Sum
 
       - name: Install Inno Setup
@@ -179,12 +179,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -192,30 +192,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v2.5.0"
+          $tag = "v2.6.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe" `
-              "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe" `
+              "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V2.5 Accurate Multilanguage" `
-              --notes "Restores the proven V2.2 Bengali Medium Q4 recognition model for faithful speech-to-text, adds Silero Voice Activity Detection so speech is detected from the correct position, creates shorter native timed lines instead of estimating long-segment timing, and checks two translation candidates by translating them back to Bengali before choosing the closest meaning. Bengali Unicode, Avro/Banglish, Hindi, English, Arabic, Urdu and all previous languages remain. No API key, Internet, subscription, or per-video cost. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V2.6 Sync and Avro" `
+              --notes "Adds a language-independent Global Sync controller that moves the complete subtitle earlier or later in 0.05-2.00 second steps, outputs Avro/Banglish as one Roman-only line without Bengali underneath, capitalizes the first letter of every Avro and English word, joins short speech fragments into a complete sentence, adds the requested Bismillah phrase comma, and increases native ASR line length so phrases are not cut in the middle. The accurate V2.2 Bengali Medium model, VAD timing, meaning-checked offline translation, all previous languages, logo, color and export tools remain. No API key, Internet, subscription, or per-video cost. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe" `
-              "installer\Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe" `
+              "installer\Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Accurate-Multilanguage-Setup-V2.5
+          name: Bangla-Subtitle-Studio-Sync-Avro-Setup-V2.6
           path: |
-            installer/Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.exe
-            installer/Bangla_Subtitle_Studio_Accurate_Multilanguage_Setup_V2.5.sha256.txt
+            installer/Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.exe
+            installer/Bangla_Subtitle_Studio_Sync_Avro_Setup_V2.6.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

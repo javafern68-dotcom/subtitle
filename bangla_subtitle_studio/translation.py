@@ -27,6 +27,14 @@ _TARGET_GREETINGS = {
     "ar": "السلام عليكم",
     "ur": "السلام علیکم",
 }
+_AVRO_BISMILLAH_RE = re.compile(
+    r"^\s*বিসমিল্লাহির?\s+র[া]?হমান(?:ির|ের)\s+রাহিম",
+    re.IGNORECASE,
+)
+_AVRO_SALAM_RE = re.compile(
+    r"^\s*আস+সালামু[য়য়]?[া ]*আলাইকুম|^\s*আসসালামু\s+আলাইকুম",
+    re.IGNORECASE,
+)
 
 
 def _application_roots() -> list[Path]:
@@ -57,10 +65,18 @@ def shift_segments_earlier(
     segments: list[SubtitleSegment], lead_seconds: float = 0.35
 ) -> list[SubtitleSegment]:
     lead = max(0.0, min(2.0, float(lead_seconds)))
+    return shift_segments(segments, -lead)
+
+
+def shift_segments(
+    segments: list[SubtitleSegment], offset_seconds: float
+) -> list[SubtitleSegment]:
+    """Move every subtitle by the same signed offset without changing language."""
+    offset = max(-30.0, min(30.0, float(offset_seconds)))
     shifted: list[SubtitleSegment] = []
     for item in segments:
-        start = max(0.0, item.start - lead)
-        end = max(start + 0.05, item.end - lead)
+        start = max(0.0, item.start + offset)
+        end = max(start + 0.05, item.end + offset)
         shifted.append(SubtitleSegment(start, end, item.text, item.secondary_text))
     return shifted
 
@@ -71,6 +87,35 @@ def _avro_reverse(texts: list[str]) -> list[str]:
     except ImportError as exc:
         raise TranslationError("Avro converter পাওয়া যায়নি। Software আবার Install করুন।") from exc
     return [str(value).strip() for value in avro.reverse_iter(texts)]
+
+
+def _title_case_latin_words(text: str) -> str:
+    """Capitalize every Roman-script word while keeping punctuation intact."""
+    def title_word(match: re.Match[str]) -> str:
+        word = match.group(0).lower()
+        return word[:1].upper() + word[1:]
+
+    return re.sub(r"[A-Za-z]+(?:['’][A-Za-z]+)*", title_word, text.strip())
+
+
+def _format_avro_text(source: str, converted: str) -> str:
+    """Produce predictable Roman Bangla for important spoken openings."""
+    output = _title_case_latin_words(converted)
+    if _AVRO_BISMILLAH_RE.search(source):
+        output = re.sub(
+            r"^\s*\S+(?:\s+\S+){0,2}",
+            "Bismillahir Rahmanir Rahim",
+            output,
+            count=1,
+        )
+    if _AVRO_SALAM_RE.search(source):
+        output = re.sub(
+            r"^\s*\S+(?:\s+\S+){0,1}",
+            "Assalamu Alaikum",
+            output,
+            count=1,
+        )
+    return output.strip()
 
 
 def _comparison_text(value: str) -> str:
@@ -132,11 +177,14 @@ def translate_segments(
     if target == "avro":
         if progress:
             progress(0.15, "বাংলা লেখা Avro/Banglish করা হচ্ছে…")
-        converted = _avro_reverse(source_texts)
+        converted = [
+            _format_avro_text(source_texts[index], value)
+            for index, value in enumerate(_avro_reverse(source_texts))
+        ]
         if progress:
             progress(1.0, "Avro/Banglish subtitle তৈরি হয়েছে")
         return [
-            SubtitleSegment(item.start, item.end, converted[index] or item.text, item.text)
+            SubtitleSegment(item.start, item.end, converted[index] or item.text, "")
             for index, item in enumerate(segments)
         ]
 
@@ -222,8 +270,9 @@ def translate_segments(
                 chosen = _select_semantic_candidate(
                     batch[local_index], candidates, candidate_backs
                 )
+                output = _preserve_greeting(batch[local_index], chosen, target)
                 translated.append(
-                    _preserve_greeting(batch[local_index], chosen, target)
+                    _title_case_latin_words(output) if target == "en" else output
                 )
                 back_index += len(candidates)
             if progress:

@@ -18,11 +18,11 @@ from .media import MediaError, _startupinfo, bundled_tool, extract_frame, probe_
 from .models import ColorSettings, Project, SubtitleSegment
 from .subtitles import format_srt_time, parse_srt, parse_timecode, write_srt
 from .transcription import transcribe_video
-from .translation import shift_segments_earlier, translate_segments
+from .translation import shift_segments, shift_segments_earlier, translate_segments
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -99,6 +99,8 @@ class BanglaSubtitleStudio(tk.Tk):
         self.audio_process: subprocess.Popen | None = None
         self.play_queue: queue.Queue[tuple[Image.Image, float] | None] = queue.Queue(maxsize=2)
         self.logo_drag_offset = (0.0, 0.0)
+        self._sync_baseline: list[SubtitleSegment] = []
+        self._global_sync_offset = 0.0
 
         self._configure_theme()
         self._create_variables()
@@ -148,6 +150,8 @@ class BanglaSubtitleStudio(tk.Tk):
         )
         self.language_var = tk.StringVar(value="বাংলা (বাংলা অক্ষর)")
         self.subtitle_lead_var = tk.DoubleVar(value=0.35)
+        self.sync_step_var = tk.DoubleVar(value=0.10)
+        self.sync_status_var = tk.StringVar(value="বর্তমান পরিবর্তন: 0.00 সেকেন্ড")
         self.prompt_var = tk.StringVar(value="")
         self.font_var = tk.StringVar(value="Nirmala UI")
         self.font_size_var = tk.DoubleVar(value=58)
@@ -157,7 +161,7 @@ class BanglaSubtitleStudio(tk.Tk):
         self.background_var = tk.BooleanVar(value=False)
         self.position_var = tk.StringVar(value="নিচে")
         self.margin_var = tk.DoubleVar(value=70)
-        self.max_chars_var = tk.DoubleVar(value=42)
+        self.max_chars_var = tk.DoubleVar(value=70)
         self.show_secondary_var = tk.BooleanVar(value=True)
         self.logo_scale_var = tk.DoubleVar(value=18)
         self.logo_opacity_var = tk.DoubleVar(value=90)
@@ -265,7 +269,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ttk.Combobox(lang_row, textvariable=self.language_var, values=list(LANGUAGES), state="readonly", width=24).pack(side="right")
         sync_row = ttk.Frame(generator, style="Card.TFrame")
         sync_row.pack(fill="x", pady=(0, 8))
-        ttk.Label(sync_row, text="Subtitle আগে দেখান (সেকেন্ড)").pack(side="left")
+        ttk.Label(sync_row, text="তৈরির সময় Subtitle আগে (সেকেন্ড)").pack(side="left")
         ttk.Spinbox(
             sync_row,
             from_=0.0,
@@ -289,6 +293,27 @@ class BanglaSubtitleStudio(tk.Tk):
         ttk.Button(tools, text="SRT Save", command=self.export_srt).pack(side="left", padx=4)
         ttk.Button(tools, text="+ Line", command=self.add_segment).pack(side="left", padx=4)
         ttk.Button(tools, text="Delete", style="Danger.TButton", command=self.delete_segment).pack(side="right")
+
+        sync_tools = ttk.Frame(self.subtitle_tab, style="Card.TFrame", padding=9)
+        sync_tools.pack(fill="x", pady=(0, 8))
+        sync_header = ttk.Frame(sync_tools, style="Card.TFrame")
+        sync_header.pack(fill="x", pady=(0, 6))
+        ttk.Label(sync_header, text="সব Subtitle-এর Global Sync", style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(sync_header, textvariable=self.sync_status_var, style="CardTitle.TLabel").pack(side="right")
+        sync_controls = ttk.Frame(sync_tools, style="Card.TFrame")
+        sync_controls.pack(fill="x")
+        ttk.Label(sync_controls, text="প্রতি ক্লিক").pack(side="left")
+        ttk.Spinbox(
+            sync_controls,
+            from_=0.05,
+            to=2.0,
+            increment=0.05,
+            textvariable=self.sync_step_var,
+            width=5,
+        ).pack(side="left", padx=(4, 7))
+        ttk.Button(sync_controls, text="◀ আগে", command=lambda: self._adjust_global_sync(-1)).pack(side="left", padx=2)
+        ttk.Button(sync_controls, text="পরে ▶", command=lambda: self._adjust_global_sync(1)).pack(side="left", padx=2)
+        ttk.Button(sync_controls, text="Reset", command=self._reset_global_sync).pack(side="right", padx=2)
 
         tree_holder = ttk.Frame(self.subtitle_tab, style="Panel.TFrame")
         tree_holder.pack(fill="both", expand=True)
@@ -335,7 +360,7 @@ class BanglaSubtitleStudio(tk.Tk):
         combo.pack(fill="x", pady=(3, 8))
         combo.bind("<<ComboboxSelected>>", lambda _event: self._sync_style())
         self._labeled_scale(position, "কিনারা থেকে দূরত্ব", self.margin_var, 10, 250, self._sync_style)
-        self._labeled_scale(position, "এক লাইনের অক্ষর", self.max_chars_var, 20, 70, self._sync_style)
+        self._labeled_scale(position, "এক লাইনের অক্ষর", self.max_chars_var, 20, 90, self._sync_style)
 
     def _build_logo_tab(self, parent: tk.Misc) -> None:
         card = self._section(parent, "ভিডিওর ওপর Logo Layer")
@@ -788,9 +813,63 @@ class BanglaSubtitleStudio(tk.Tk):
             messagebox.showerror("Subtitle তৈরি হয়নি", str(error), parent=self)
             return
         self.project.subtitles = segments
+        self._capture_sync_baseline()
         self._refresh_subtitle_tree()
         self.status_var.set(f"{len(segments)}টি subtitle line তৈরি হয়েছে। ভুল থাকলে double-click করে ঠিক করুন।")
         self.progress_var.set(100)
+        self.request_preview(self.current_time)
+
+    @staticmethod
+    def _copy_segments(segments: list[SubtitleSegment]) -> list[SubtitleSegment]:
+        return [
+            SubtitleSegment(item.start, item.end, item.text, item.secondary_text)
+            for item in segments
+        ]
+
+    def _capture_sync_baseline(self) -> None:
+        self._sync_baseline = self._copy_segments(self.project.subtitles)
+        self._global_sync_offset = 0.0
+        self.sync_status_var.set("বর্তমান পরিবর্তন: 0.00 সেকেন্ড")
+
+    def _adjust_global_sync(self, direction: int) -> None:
+        if not self.project.subtitles:
+            messagebox.showinfo(APP_NAME, "আগে Subtitle তৈরি অথবা SRT Import করুন।", parent=self)
+            return
+        if len(self._sync_baseline) != len(self.project.subtitles):
+            self._capture_sync_baseline()
+        try:
+            step = max(0.05, min(2.0, float(self.sync_step_var.get())))
+        except (TypeError, ValueError, tk.TclError):
+            step = 0.10
+            self.sync_step_var.set(step)
+        self._global_sync_offset = max(
+            -30.0,
+            min(30.0, self._global_sync_offset + (-step if direction < 0 else step)),
+        )
+        self.project.subtitles = shift_segments(
+            self._sync_baseline,
+            self._global_sync_offset,
+        )
+        if self._global_sync_offset < 0:
+            label = f"{abs(self._global_sync_offset):.2f} সেকেন্ড আগে"
+        elif self._global_sync_offset > 0:
+            label = f"{self._global_sync_offset:.2f} সেকেন্ড পরে"
+        else:
+            label = "0.00 সেকেন্ড"
+        self.sync_status_var.set(f"বর্তমান পরিবর্তন: {label}")
+        self.status_var.set(f"সব ভাষার সম্পূর্ণ Subtitle {label} করা হয়েছে।")
+        self._refresh_subtitle_tree()
+        self.request_preview(self.current_time)
+
+    def _reset_global_sync(self) -> None:
+        if not self._sync_baseline:
+            self._capture_sync_baseline()
+            return
+        self.project.subtitles = self._copy_segments(self._sync_baseline)
+        self._global_sync_offset = 0.0
+        self.sync_status_var.set("বর্তমান পরিবর্তন: 0.00 সেকেন্ড")
+        self.status_var.set("Global Subtitle Sync Reset হয়েছে।")
+        self._refresh_subtitle_tree()
         self.request_preview(self.current_time)
 
     def cancel_task(self) -> None:
@@ -875,6 +954,7 @@ class BanglaSubtitleStudio(tk.Tk):
                 return
             self.project.subtitles[index] = updated
             self.project.subtitles.sort(key=lambda item: item.start)
+            self._capture_sync_baseline()
             self._refresh_subtitle_tree()
             self._redraw_preview()
             dialog.destroy()
@@ -886,6 +966,7 @@ class BanglaSubtitleStudio(tk.Tk):
         end = min(self.project.duration or self.current_time + 3, self.current_time + 3)
         self.project.subtitles.append(SubtitleSegment(self.current_time, max(self.current_time + 0.5, end), "নতুন সাবটাইটেল"))
         self.project.subtitles.sort(key=lambda item: item.start)
+        self._capture_sync_baseline()
         self._refresh_subtitle_tree()
 
     def delete_segment(self) -> None:
@@ -895,6 +976,7 @@ class BanglaSubtitleStudio(tk.Tk):
         index = int(selection[0])
         if messagebox.askyesno(APP_NAME, "নির্বাচিত subtitle line মুছবেন?", parent=self):
             del self.project.subtitles[index]
+            self._capture_sync_baseline()
             self._refresh_subtitle_tree()
             self._redraw_preview()
 
@@ -908,6 +990,7 @@ class BanglaSubtitleStudio(tk.Tk):
             messagebox.showerror(APP_NAME, f"SRT পড়া যায়নি:\n{exc}", parent=self)
             return
         self.project.subtitles = segments
+        self._capture_sync_baseline()
         self._refresh_subtitle_tree()
         self.status_var.set(f"{len(segments)}টি subtitle line Import হয়েছে।")
         self._redraw_preview()
@@ -1150,6 +1233,7 @@ class BanglaSubtitleStudio(tk.Tk):
         self.temperature_var.set(color.temperature)
         self.tint_var.set(color.tint)
         self.output_var.set(self.project.output_path or self.project.default_output_path())
+        self._capture_sync_baseline()
         self._refresh_subtitle_tree()
 
     def _update_time_label(self) -> None:
