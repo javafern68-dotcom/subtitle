@@ -66,7 +66,11 @@ _AVRO_BISMILLAH_RE = re.compile(
     re.IGNORECASE,
 )
 _AVRO_SALAM_RE = re.compile(
-    r"^\s*আস+সালামু[য়য়]?[া ]*আলাইকুম|^\s*আসসালামু\s+আলাইকুম",
+    r"আস+সালামু[য়য়]?[া ]*আলাইকুম|আসসালামু\s+আলাইকুম",
+    re.IGNORECASE,
+)
+_AVRO_RAHMATULLAH_RE = re.compile(
+    r"(?:ওয়া\s*)?র[া]?হম[া]?তুল্লাহি|রাহমাতুল্লাহি",
     re.IGNORECASE,
 )
 
@@ -141,9 +145,35 @@ def _title_case_latin_words(text: str) -> str:
     return re.sub(r"[A-Za-z]+(?:['’][A-Za-z]+)*", title_word, text.strip())
 
 
+def _clean_avro_roman(text: str) -> str:
+    """Return only readable ASCII Roman text; Bengali marks must never reach ASS."""
+    punctuation = str(text).translate(
+        str.maketrans(
+            {
+                "।": ".",
+                "–": "-",
+                "—": "-",
+                "‘": "'",
+                "’": "'",
+                "“": '"',
+                "”": '"',
+                "…": "...",
+            }
+        )
+    )
+    # Avro reverse can occasionally leave a Bengali vowel/hasanta mark attached
+    # to a Roman word. ASCII filtering removes every Bengali letter, combining
+    # mark and dotted-circle trigger while preserving ordinary punctuation.
+    ascii_only = punctuation.encode("ascii", "ignore").decode("ascii")
+    ascii_only = re.sub(r"[^A-Za-z0-9\s.,!?;:'\"()\-]", "", ascii_only)
+    ascii_only = re.sub(r"\s+([.,!?;:])", r"\1", ascii_only)
+    ascii_only = re.sub(r"([.,!?;:])(?=[A-Za-z])", r"\1 ", ascii_only)
+    return " ".join(ascii_only.split()).strip()
+
+
 def _format_avro_text(source: str, converted: str) -> str:
-    """Produce predictable Roman Bangla for important spoken openings."""
-    output = _title_case_latin_words(converted)
+    """Produce clean Roman-only Bangla with predictable spoken openings."""
+    output = _title_case_latin_words(_clean_avro_roman(converted))
     if _AVRO_BISMILLAH_RE.search(source):
         output = re.sub(
             r"^\s*\S+(?:\s+\S+){0,2}",
@@ -153,12 +183,21 @@ def _format_avro_text(source: str, converted: str) -> str:
         )
     if _AVRO_SALAM_RE.search(source):
         output = re.sub(
-            r"^\s*\S+(?:\s+\S+){0,1}",
+            r"\b[A-Za-z]*salam[A-Za-z]*\s+[A-Za-z]*li[A-Za-z]*\b",
             "Assalamu Alaikum",
             output,
             count=1,
+            flags=re.IGNORECASE,
         )
-    return output.strip()
+    if _AVRO_RAHMATULLAH_RE.search(source):
+        output = re.sub(
+            r"\b[A-Za-z]*rahmat[A-Za-z]*lah[A-Za-z]*\b",
+            "Warahmatullahi",
+            output,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    return _title_case_latin_words(_clean_avro_roman(output))
 
 
 def _comparison_text(value: str) -> str:

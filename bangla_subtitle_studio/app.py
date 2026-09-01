@@ -19,11 +19,15 @@ from .models import ColorSettings, Project, SubtitleSegment
 from .subtitles import format_srt_time, parse_srt, parse_timecode, write_srt
 from .transcription import transcribe_video
 from .translation import shift_segments, shift_segments_earlier, translate_segments
-from .voice_translate import create_voice_translated_video
+from .voice_translate import (
+    TEXT_VOICE_OPTIONS,
+    create_text_voice,
+    create_voice_translated_video,
+)
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "3.2.2"
+APP_VERSION = "3.3.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -51,6 +55,13 @@ LANGUAGES = {
 }
 VOICE_LANGUAGES = {
     label: code for label, code in LANGUAGES.items() if code != "avro"
+}
+TEXT_VOICE_LANGUAGES = {
+    "বাংলা": "bn",
+    "English": "en",
+    "हिन्दी (Hindi)": "hi",
+    "العربية (Arabic)": "ar",
+    "اردو (Urdu)": "ur",
 }
 class ScrollableTab(ttk.Frame):
     def __init__(self, parent: tk.Misc) -> None:
@@ -159,6 +170,11 @@ class BanglaSubtitleStudio(tk.Tk):
         self.voice_original_volume_var = tk.DoubleVar(value=0.0)
         self.voice_add_subtitles_var = tk.BooleanVar(value=True)
         self.voice_output_var = tk.StringVar(value="")
+        self.text_voice_language_var = tk.StringVar(value="English")
+        self.text_voice_id_var = tk.StringVar(value="en-US-JennyNeural — নারী কণ্ঠ • US")
+        self.text_voice_rate_var = tk.DoubleVar(value=0)
+        self.text_voice_pitch_var = tk.DoubleVar(value=0)
+        self.text_voice_output_var = tk.StringVar(value="")
         self.subtitle_lead_var = tk.DoubleVar(value=0.35)
         self.sync_step_var = tk.DoubleVar(value=0.10)
         self.sync_status_var = tk.StringVar(value="বর্তমান পরিবর্তন: 0.00 সেকেন্ড")
@@ -231,18 +247,21 @@ class BanglaSubtitleStudio(tk.Tk):
         self.notebook.pack(fill="both", expand=True)
         self.subtitle_tab = ttk.Frame(self.notebook, style="Panel.TFrame", padding=10)
         self.voice_tab = ScrollableTab(self.notebook)
+        self.text_voice_tab = ScrollableTab(self.notebook)
         self.style_tab = ScrollableTab(self.notebook)
         self.logo_tab = ScrollableTab(self.notebook)
         self.color_tab = ScrollableTab(self.notebook)
         self.export_tab = ScrollableTab(self.notebook)
         self.notebook.add(self.subtitle_tab, text="সাবটাইটেল")
         self.notebook.add(self.voice_tab, text="Voice Translate")
+        self.notebook.add(self.text_voice_tab, text="Text To Voice")
         self.notebook.add(self.style_tab, text="স্টাইল")
         self.notebook.add(self.logo_tab, text="লোগো")
         self.notebook.add(self.color_tab, text="কালার")
         self.notebook.add(self.export_tab, text="Export")
         self._build_subtitle_tab()
         self._build_voice_tab(self.voice_tab.body)
+        self._build_text_voice_tab(self.text_voice_tab.body)
         self._build_style_tab(self.style_tab.body)
         self._build_logo_tab(self.logo_tab.body)
         self._build_color_tab(self.color_tab.body)
@@ -272,7 +291,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             generator,
-            text="AI Model: V2.2 Accurate Bangla + Voice Timing + Meaning-Checked Translation",
+            text="AI Model: V3.3 Clean Avro + Text To Voice + Meaning-Checked Translation",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(0, 10))
@@ -438,6 +457,132 @@ class BanglaSubtitleStudio(tk.Tk):
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(9, 0))
+
+    def _build_text_voice_tab(self, parent: tk.Misc) -> None:
+        script_card = self._section(parent, "Text / Script থেকে Natural Voice")
+        ttk.Label(
+            script_card,
+            text="বাংলা বা English script লিখুন। নির্বাচিত ভাষা ও Voice ID অনুযায়ী MP3 voice তৈরি হবে।",
+            style="Muted.TLabel",
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(0, 8))
+        self.text_voice_text = tk.Text(
+            script_card,
+            height=12,
+            wrap="word",
+            bg="#0F1A2C",
+            fg="#FFFFFF",
+            insertbackground="#FFFFFF",
+            selectbackground="#285EAA",
+            relief="flat",
+            padx=10,
+            pady=9,
+            font=("Nirmala UI", 11),
+        )
+        self.text_voice_text.pack(fill="both", expand=True)
+
+        voice_card = self._section(parent, "ভাষা, Voice ID ও কণ্ঠ নিয়ন্ত্রণ")
+        ttk.Label(voice_card, text="Script-এর ভাষা", style="CardTitle.TLabel").pack(anchor="w")
+        language_combo = ttk.Combobox(
+            voice_card,
+            textvariable=self.text_voice_language_var,
+            values=list(TEXT_VOICE_LANGUAGES),
+            state="readonly",
+        )
+        language_combo.pack(fill="x", pady=(3, 9))
+        language_combo.bind(
+            "<<ComboboxSelected>>", lambda _event: self._refresh_text_voice_ids()
+        )
+        ttk.Label(voice_card, text="Voice ID", style="CardTitle.TLabel").pack(anchor="w")
+        self.text_voice_id_combo = ttk.Combobox(
+            voice_card,
+            textvariable=self.text_voice_id_var,
+            state="readonly",
+        )
+        self.text_voice_id_combo.pack(fill="x", pady=(3, 4))
+        self._labeled_scale(
+            voice_card,
+            "Speed: Slow (-) ↔ Fast (+) %",
+            self.text_voice_rate_var,
+            -50,
+            100,
+            lambda: None,
+        )
+        self._labeled_scale(
+            voice_card,
+            "Pitch: ভারী (-) ↔ চিকন (+) Hz",
+            self.text_voice_pitch_var,
+            -50,
+            50,
+            lambda: None,
+        )
+        ttk.Button(
+            voice_card,
+            text="Speed ও Pitch Reset",
+            command=self._reset_text_voice_controls,
+        ).pack(fill="x", pady=(9, 0))
+        ttk.Label(
+            voice_card,
+            text="Natural voice তৈরির জন্য Internet লাগবে; কোনো API key বা প্রতি voice-এর টাকা লাগবে না।",
+            foreground="#65E6A3",
+            background="#1B2940",
+            font=("Nirmala UI", 9, "bold"),
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(10, 0))
+
+        output_card = self._section(parent, "Voice MP3 Save")
+        ttk.Label(output_card, text="Output MP3 file", style="CardTitle.TLabel").pack(anchor="w")
+        output_row = ttk.Frame(output_card, style="Card.TFrame")
+        output_row.pack(fill="x", pady=(4, 10))
+        ttk.Entry(output_row, textvariable=self.text_voice_output_var).pack(
+            side="left", fill="x", expand=True
+        )
+        ttk.Button(
+            output_row,
+            text="...",
+            width=4,
+            command=self.choose_text_voice_output,
+        ).pack(side="left", padx=(4, 0))
+        actions = ttk.Frame(output_card, style="Card.TFrame")
+        actions.pack(fill="x")
+        self.text_voice_generate_button = ttk.Button(
+            actions,
+            text="Text থেকে Voice তৈরি করুন",
+            style="Accent.TButton",
+            command=self.start_text_voice_generation,
+        )
+        self.text_voice_generate_button.pack(side="left", fill="x", expand=True)
+        self.text_voice_cancel_button = ttk.Button(
+            actions,
+            text="বাতিল",
+            style="Danger.TButton",
+            command=self.cancel_task,
+            state="disabled",
+        )
+        self.text_voice_cancel_button.pack(side="left", padx=(6, 0))
+        ttk.Label(
+            output_card,
+            text="বড় script হলে বাক্য অনুযায়ী ছোট অংশে তৈরি করে স্বয়ংক্রিয়ভাবে একটি MP3 file করা হবে।",
+            style="Muted.TLabel",
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(9, 0))
+        self._refresh_text_voice_ids()
+
+    def _refresh_text_voice_ids(self) -> None:
+        language = TEXT_VOICE_LANGUAGES.get(
+            self.text_voice_language_var.get(), "en"
+        )
+        values = [
+            f"{voice_id} — {description}"
+            for voice_id, description in TEXT_VOICE_OPTIONS.get(language, [])
+        ]
+        self.text_voice_id_combo.configure(values=values)
+        if self.text_voice_id_var.get() not in values:
+            self.text_voice_id_var.set(values[0] if values else "")
+
+    def _reset_text_voice_controls(self) -> None:
+        self.text_voice_rate_var.set(0)
+        self.text_voice_pitch_var.set(0)
 
     def _build_style_tab(self, parent: tk.Misc) -> None:
         card = self._section(parent, "ফন্ট ও লেখা")
@@ -994,8 +1139,12 @@ class BanglaSubtitleStudio(tk.Tk):
         self.generate_button.configure(state=state)
         self.export_button.configure(state=state)
         self.voice_translate_button.configure(state=state)
+        self.text_voice_generate_button.configure(state=state)
         self.cancel_button.configure(state="normal" if value else "disabled")
         self.voice_cancel_button.configure(state="normal" if value else "disabled")
+        self.text_voice_cancel_button.configure(
+            state="normal" if value else "disabled"
+        )
         if not value:
             self.progress_var.set(0)
 
@@ -1231,6 +1380,104 @@ class BanglaSubtitleStudio(tk.Tk):
         path = filedialog.asksaveasfilename(title="Final video Save", defaultextension=".mp4", initialfile=initial, filetypes=[("MP4 Video", "*.mp4")])
         if path:
             self.output_var.set(path)
+
+    def choose_text_voice_output(self) -> None:
+        language = TEXT_VOICE_LANGUAGES.get(
+            self.text_voice_language_var.get(), "en"
+        )
+        initial = (
+            Path(self.text_voice_output_var.get()).name
+            if self.text_voice_output_var.get().strip()
+            else f"text_to_voice_{language}.mp3"
+        )
+        path = filedialog.asksaveasfilename(
+            title="Text To Voice MP3 Save",
+            defaultextension=".mp3",
+            initialfile=initial,
+            filetypes=[("MP3 Audio", "*.mp3")],
+        )
+        if path:
+            self.text_voice_output_var.set(path)
+
+    def start_text_voice_generation(self) -> None:
+        if self.busy:
+            return
+        script = self.text_voice_text.get("1.0", "end-1c").strip()
+        if not script:
+            messagebox.showinfo(
+                APP_NAME,
+                "Text To Voice ঘরে বাংলা অথবা English script লিখুন।",
+                parent=self,
+            )
+            return
+        language = TEXT_VOICE_LANGUAGES.get(
+            self.text_voice_language_var.get(), "en"
+        )
+        selected_voice = self.text_voice_id_var.get().strip()
+        voice_id = selected_voice.split(" — ", 1)[0].strip()
+        if not voice_id:
+            messagebox.showerror(
+                APP_NAME, "একটি Voice ID নির্বাচন করুন।", parent=self
+            )
+            return
+        output = self.text_voice_output_var.get().strip()
+        if not output:
+            self.choose_text_voice_output()
+            output = self.text_voice_output_var.get().strip()
+            if not output:
+                return
+        if not output.lower().endswith(".mp3"):
+            output += ".mp3"
+            self.text_voice_output_var.set(output)
+        rate = int(round(self.text_voice_rate_var.get()))
+        pitch = int(round(self.text_voice_pitch_var.get()))
+        self._set_busy(True)
+        self.busy_cancel.clear()
+
+        def progress(value: float, message: str) -> None:
+            self.after(0, lambda: self._update_progress(value, message))
+
+        def worker() -> None:
+            try:
+                create_text_voice(
+                    text=script,
+                    language=language,
+                    voice_id=voice_id,
+                    output_path=output,
+                    rate_percent=rate,
+                    pitch_hz=pitch,
+                    progress=progress,
+                    cancel_event=self.busy_cancel,
+                )
+                self.after(
+                    0, lambda: self._finish_text_voice_generation(output, None)
+                )
+            except Exception as exc:
+                self.after(
+                    0,
+                    lambda error=exc: self._finish_text_voice_generation(
+                        output, error
+                    ),
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_text_voice_generation(
+        self, output: str, error: Exception | None
+    ) -> None:
+        self._set_busy(False)
+        if error:
+            self.status_var.set(str(error))
+            messagebox.showerror("Text To Voice হয়নি", str(error), parent=self)
+            return
+        self.progress_var.set(100)
+        self.status_var.set("Text To Voice MP3 তৈরি হয়েছে।")
+        if messagebox.askyesno(
+            "Text To Voice সম্পন্ন",
+            f"Voice তৈরি হয়েছে:\n{output}\n\nFolder খুলবেন?",
+            parent=self,
+        ):
+            self._open_folder(output)
 
     def choose_voice_output(self) -> None:
         if self.voice_output_var.get().strip():

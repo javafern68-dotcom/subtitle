@@ -1,13 +1,22 @@
-# Bangla Subtitle Studio V3.2.2 Resilient Offline Translation
+# Bangla Subtitle Studio V3.3.0 Clean Avro + Text To Voice
 
-## V3.2.2 resilient offline sentence recovery
+## V3.3.0 highlights
+
+- New Text To Voice tab with Bengali, English, Hindi, Arabic and Urdu.
+- Natural Voice ID selection, Slow/Fast speed and low/high pitch controls.
+- Long scripts are generated in reliable chunks and joined into one MP3.
+- Avro/Banglish is strict ASCII Roman-only, with no Bengali vowel/hasanta marks.
+- No API key or per-voice charge; natural voice requires internet.
+
+
+## V3.3.0 resilient offline sentence recovery
 
 - Does not cancel an entire video because one offline sentence candidate uses the wrong alphabet.
 - Tries another meaning-preserving candidate, retries the sentence, then uses an offline English bridge.
 - Accepts Roman person/brand names inside a real Bengali sentence.
 - Keeps a difficult final phrase audible instead of leaving a silent gap.
 
-## V3.2.2 natural Bengali and timing fix
+## V3.3.0 natural Bengali and timing fix
 
 - Common literal Hindi fallback such as `আপনি কিভাবে? আমি ঠিক আছে।` is normalized to natural spoken Bengali: `আপনি কেমন আছেন? আমি ঠিক আছি।`.
 
@@ -87,7 +96,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe` from the `v3.2.2` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe` from the `v3.3.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 

@@ -11,12 +11,14 @@ from bangla_subtitle_studio.media import extract_audio_chunk, probe_video
 from bangla_subtitle_studio.models import SubtitleSegment
 from bangla_subtitle_studio.subtitles import parse_srt
 from bangla_subtitle_studio.translation import (
+    _format_avro_text,
     _select_valid_target_candidate,
     _valid_target_script,
     translate_segments,
 )
 from bangla_subtitle_studio.voice_translate import (
     _save_speech,
+    create_text_voice,
     create_voice_translated_video,
 )
 
@@ -51,6 +53,17 @@ def translation_self_test() -> None:
         or avro_item.secondary_text
     ):
         raise RuntimeError(f"Avro Roman-only self-test failed: {avro_item}")
+    dirty_avro = _format_avro_text(
+        "বিসমিল্লাহির রহমানির রাহিম আসসালামু আলাইকুম ওয়া রাহমাতুল্লাহি",
+        "Bismillo্Lah Rohanir Rohim Asalamu Alikeumu Rahmatullo্Lahi",
+    )
+    if (
+        dirty_avro
+        != "Bismillahir Rahmanir Rahim Assalamu Alaikum Warahmatullahi"
+        or re.search(r"[^\x00-\x7F]", dirty_avro)
+        or re.search(r"[\u0980-\u09FF]", dirty_avro)
+    ):
+        raise RuntimeError(f"Dirty Avro mark cleanup self-test failed: {dirty_avro}")
     if hindi_item.start != source[0].start or english_item.end != source[0].end:
         raise RuntimeError("Translation changed subtitle timing")
     if not re.search(r"[\u0980-\u09FF]", hindi_to_bangla.text):
@@ -171,9 +184,16 @@ def voice_translate_self_test(input_video: str, output_video: str) -> None:
 
 
 def voice_fallback_self_test(output_audio: str) -> None:
-    _save_speech("আপনি কেমন আছেন?", "google:bn", output_audio)
+    create_text_voice(
+        "আপনি কেমন আছেন? এটি Text To Voice পরীক্ষা।",
+        "bn",
+        "bn-BD-NabanitaNeural",
+        output_audio,
+        rate_percent=20,
+        pitch_hz=8,
+    )
     if not Path(output_audio).is_file() or Path(output_audio).stat().st_size < 1_000:
-        raise RuntimeError("Google Bengali fallback voice was not created")
+        raise RuntimeError("Controlled Bengali Text To Voice MP3 was not created")
 
 
 if __name__ == "__main__":

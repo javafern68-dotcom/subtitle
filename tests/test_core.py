@@ -30,12 +30,16 @@ from bangla_subtitle_studio.transcription import (
     transcribe_audio_file,
 )
 from bangla_subtitle_studio.voice_translate import (
+    TEXT_VOICE_OPTIONS,
     VOICE_SAMPLE_RATE,
     _atempo_expression,
     _build_timed_voice_track,
     _online_voice,
     _save_speech,
     _select_voice,
+    _signed_control,
+    _split_text_voice_chunks,
+    create_text_voice,
     create_voice_translated_video,
 )
 from bangla_subtitle_studio.translation import (
@@ -48,6 +52,7 @@ from bangla_subtitle_studio.translation import (
     _select_semantic_candidate,
     _select_valid_target_candidate,
     _valid_target_script,
+    _clean_avro_roman,
     _format_avro_text,
     _title_case_latin_words,
     shift_segments,
@@ -421,6 +426,25 @@ class TranslationAndSyncTests(unittest.TestCase):
             "Bismillahir Rahmanir Rahim",
         )
 
+    def test_avro_removes_bengali_hasanta_and_dotted_circle_triggers(self) -> None:
+        dirty = "Bismillo্Lah Rohanir Rohim Asalamu Alikeumu Rahmatullo্Lahi"
+        cleaned = _format_avro_text(
+            "বিসমিল্লাহির রহমানির রাহিম আসসালামু আলাইকুম ওয়া রাহমাতুল্লাহি",
+            dirty,
+        )
+        self.assertEqual(
+            cleaned,
+            "Bismillahir Rahmanir Rahim Assalamu Alaikum Warahmatullahi",
+        )
+        self.assertTrue(all(ord(character) < 128 for character in cleaned))
+        self.assertNotRegex(cleaned, r"[\u0980-\u09FF]")
+
+    def test_generic_avro_cleaner_keeps_only_roman_text(self) -> None:
+        self.assertEqual(
+            _clean_avro_roman("Ami্ Banglay। Gaan Gai…"),
+            "Ami Banglay. Gaan Gai...",
+        )
+
 
 class UIRegressionTests(unittest.TestCase):
     def test_color_presets_grid_isolated_from_packed_card(self) -> None:
@@ -457,8 +481,62 @@ class UIRegressionTests(unittest.TestCase):
         self.assertIn("নতুন voice-এর ভাষা", source)
         self.assertIn("create_voice_translated_video", source)
 
+    def test_ui_has_text_to_voice_tab_and_controls(self) -> None:
+        source = (Path(__file__).parents[1] / "bangla_subtitle_studio" / "app.py").read_text(encoding="utf-8")
+        self.assertIn('self.notebook.add(self.text_voice_tab, text="Text To Voice")', source)
+        self.assertIn("Text / Script থেকে Natural Voice", source)
+        self.assertIn("Voice ID", source)
+        self.assertIn("Speed: Slow (-) ↔ Fast (+) %", source)
+        self.assertIn("Pitch: ভারী (-) ↔ চিকন (+) Hz", source)
+        self.assertIn("create_text_voice", source)
+
 
 class VoiceTranslationTests(unittest.TestCase):
+    def test_text_voice_has_bengali_and_english_voice_ids(self) -> None:
+        self.assertIn(("bn-BD-NabanitaNeural", "নারী কণ্ঠ"), TEXT_VOICE_OPTIONS["bn"])
+        self.assertTrue(
+            any(voice_id == "en-US-JennyNeural" for voice_id, _label in TEXT_VOICE_OPTIONS["en"])
+        )
+
+    def test_text_voice_long_script_is_split_at_readable_boundaries(self) -> None:
+        script = " ".join(
+            f"Sentence number {index} is clear." for index in range(1, 31)
+        )
+        chunks = _split_text_voice_chunks(script, max_chars=200)
+        self.assertGreaterEqual(len(chunks), 3)
+        self.assertTrue(all(len(chunk) <= 200 for chunk in chunks))
+        self.assertEqual(" ".join(chunks), script)
+
+    def test_text_voice_signed_edge_controls_are_valid(self) -> None:
+        self.assertEqual(_signed_control(25, "%"), "+25%")
+        self.assertEqual(_signed_control(-12, "Hz"), "-12Hz")
+
+    @mock.patch("bangla_subtitle_studio.voice_translate._save_text_voice_chunk")
+    def test_text_voice_creates_complete_mp3(self, save_chunk: mock.Mock) -> None:
+        def write_audio(
+            _text: str,
+            _language: str,
+            _voice_id: str,
+            output: str,
+            _rate: int,
+            _pitch: int,
+        ) -> None:
+            Path(output).write_bytes(b"ID3" + b"\x01" * 1_000)
+
+        save_chunk.side_effect = write_audio
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = str(Path(temp_dir) / "voice.mp3")
+            create_text_voice(
+                "This is a complete voice test.",
+                "en",
+                "en-US-JennyNeural",
+                output,
+                rate_percent=20,
+                pitch_hz=-5,
+            )
+            self.assertGreater(Path(output).stat().st_size, 500)
+        save_chunk.assert_called_once()
+
     def test_preferred_bengali_female_voice_is_selected(self) -> None:
         voices = [
             {"Locale": "bn-BD", "Gender": "Female", "ShortName": "bn-BD-OtherNeural"},

@@ -1,6 +1,22 @@
-# Bangla Subtitle Studio V3.2.2 — Resilient Offline Translation
+# Bangla Subtitle Studio V3.3.0 — Clean Avro + Text To Voice
 
-## V3.2.2-এ একটি বাক্যের জন্য পুরো ভিডিও আর বন্ধ হবে না
+## V3.3.0-এর নতুন Text To Voice
+
+- Voice Translate-এর পাশে আলাদা **Text To Voice** tab।
+- বাংলা, English, Hindi, Arabic ও Urdu script থেকে MP3 voice।
+- প্রতিটি ভাষার নারী/পুরুষ **Voice ID** নির্বাচন।
+- **Slow/Fast Speed** এবং **Low/High Pitch** control।
+- বড় script ছোট বাক্যে তৈরি হয়ে স্বয়ংক্রিয়ভাবে একটি MP3 হবে।
+- Natural voice-এর জন্য Internet লাগবে; API key বা প্রতি voice-এর টাকা লাগবে না।
+
+## পরিষ্কার Avro/Banglish
+
+- Roman লেখার মধ্যে বাংলা হসন্ত, কার বা dotted-circle চিহ্ন থাকবে না।
+- শুধু English/Roman অক্ষর ও সাধারণ punctuation থাকবে।
+- “Bismillahir Rahmanir Rahim Assalamu Alaikum Warahmatullahi” পরিষ্কারভাবে তৈরি হবে।
+
+
+## V3.3.0-এ একটি বাক্যের জন্য পুরো ভিডিও আর বন্ধ হবে না
 
 - একটি offline অনুবাদ ভুল অক্ষরে হলে পাশের সঠিক বিকল্পটি নেওয়া হবে।
 - প্রয়োজন হলে শুধু সেই বাক্যটি আবার অনুবাদ হবে।
@@ -8,7 +24,7 @@
 - OpenAI/YouTube/ব্যক্তির নামের মতো Roman নাম থাকলেও সঠিক বাংলা বাক্য বাতিল হবে না।
 - কঠিন একটি নাম বা বাক্যের জন্য সম্পূর্ণ Voice Translate বন্ধ বা নীরব হবে না।
 
-## V3.2.2-এ স্বাভাবিক বাংলা ব্যাকরণ
+## V3.3.0-এ স্বাভাবিক বাংলা ব্যাকরণ
 
 - Offline fallback-এর `আপনি কিভাবে? আমি ঠিক আছে।` এখন voice তৈরির আগে `আপনি কেমন আছেন? আমি ঠিক আছি।` হবে।
 
@@ -84,12 +100,12 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V3.2.2 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V3.3.0 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Voice Translate করার নিয়ম
 

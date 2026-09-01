@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -33,6 +34,31 @@ _PREFERRED_VOICES = {
     ("ar", "Male"): "ar-EG-ShakirNeural",
     ("ur", "Female"): "ur-PK-UzmaNeural",
     ("ur", "Male"): "ur-PK-AsadNeural",
+}
+TEXT_VOICE_OPTIONS = {
+    "bn": [
+        ("bn-BD-NabanitaNeural", "নারী কণ্ঠ"),
+        ("bn-BD-PradeepNeural", "পুরুষ কণ্ঠ"),
+    ],
+    "en": [
+        ("en-US-JennyNeural", "নারী কণ্ঠ • US"),
+        ("en-US-AriaNeural", "নারী কণ্ঠ • US"),
+        ("en-US-GuyNeural", "পুরুষ কণ্ঠ • US"),
+        ("en-GB-SoniaNeural", "নারী কণ্ঠ • UK"),
+        ("en-GB-RyanNeural", "পুরুষ কণ্ঠ • UK"),
+    ],
+    "hi": [
+        ("hi-IN-SwaraNeural", "নারী কণ্ঠ"),
+        ("hi-IN-MadhurNeural", "পুরুষ কণ্ঠ"),
+    ],
+    "ar": [
+        ("ar-EG-SalmaNeural", "নারী কণ্ঠ"),
+        ("ar-EG-ShakirNeural", "পুরুষ কণ্ঠ"),
+    ],
+    "ur": [
+        ("ur-PK-UzmaNeural", "নারী কণ্ঠ"),
+        ("ur-PK-AsadNeural", "পুরুষ কণ্ঠ"),
+    ],
 }
 def _cancelled(cancel_event: threading.Event | None) -> bool:
     return bool(cancel_event and cancel_event.is_set())
@@ -118,6 +144,240 @@ def _save_speech(text: str, voice: str, output_path: str) -> None:
             raise VoiceTranslationError(
                 "Microsoft ও Google—দুই voice service-এই connection হয়নি। Internet, VPN ও Firewall পরীক্ষা করুন।"
             ) from google_error
+
+
+def _split_text_voice_chunks(text: str, max_chars: int = 2_400) -> list[str]:
+    """Split a long script at natural sentence/word boundaries for reliable TTS."""
+    limit = max(200, int(max_chars))
+    normalized = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"[ \t]+", " ", normalized).strip()
+    pieces = [
+        value.strip()
+        for value in re.split(r"(?<=[.!?।])\s+|\n+", normalized)
+        if value.strip()
+    ]
+    chunks: list[str] = []
+    current = ""
+    for piece in pieces:
+        while len(piece) > limit:
+            cut = piece.rfind(" ", 0, limit + 1)
+            if cut < limit // 3:
+                cut = limit
+            head = piece[:cut].strip()
+            if current:
+                chunks.append(current)
+                current = ""
+            if head:
+                chunks.append(head)
+            piece = piece[cut:].strip()
+        candidate = f"{current} {piece}".strip() if current else piece
+        if current and len(candidate) > limit:
+            chunks.append(current)
+            current = piece
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _signed_control(value: int, suffix: str) -> str:
+    number = int(value)
+    return f"{number:+d}{suffix}"
+
+
+def _apply_google_voice_controls(
+    source_path: str,
+    output_path: str,
+    rate_percent: int,
+    pitch_hz: int,
+) -> None:
+    speed = max(0.50, min(2.0, 1.0 + rate_percent / 100.0))
+    pitch_factor = max(0.80, min(1.20, 1.0 + pitch_hz / 300.0))
+    filters: list[str] = []
+    if abs(pitch_factor - 1.0) > 0.001:
+        filters.extend(
+            [
+                "aresample=44100",
+                f"asetrate={44100 * pitch_factor:.3f}",
+                "aresample=44100",
+                _atempo_expression(1.0 / pitch_factor),
+            ]
+        )
+    if abs(speed - 1.0) > 0.001:
+        filters.append(_atempo_expression(speed))
+    if not filters:
+        os.replace(source_path, output_path)
+        return
+    ffmpeg = bundled_tool("ffmpeg")
+    completed = subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            source_path,
+            "-vn",
+            "-af",
+            ",".join(filters),
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "192k",
+            output_path,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        startupinfo=_startupinfo(),
+        check=False,
+    )
+    if completed.returncode != 0 or not Path(output_path).is_file():
+        raise VoiceTranslationError(
+            completed.stderr.decode("utf-8", "replace").strip()
+            or "Google voice-এর Speed/Pitch পরিবর্তন করা যায়নি।"
+        )
+
+
+def _save_text_voice_chunk(
+    text: str,
+    language: str,
+    voice_id: str,
+    output_path: str,
+    rate_percent: int,
+    pitch_hz: int,
+) -> None:
+    Path(output_path).unlink(missing_ok=True)
+    try:
+        import edge_tts
+
+        edge_tts.Communicate(
+            text=text,
+            voice=voice_id,
+            rate=_signed_control(rate_percent, "%"),
+            pitch=_signed_control(pitch_hz, "Hz"),
+        ).save_sync(output_path)
+        if Path(output_path).is_file() and Path(output_path).stat().st_size > 500:
+            return
+        raise VoiceTranslationError("Microsoft voice file খালি হয়েছে।")
+    except Exception as edge_error:
+        raw_path = str(Path(output_path).with_suffix(".google.mp3"))
+        try:
+            _save_google_speech(text, language, raw_path)
+            _apply_google_voice_controls(
+                raw_path, output_path, rate_percent, pitch_hz
+            )
+        except Exception as google_error:
+            raise VoiceTranslationError(
+                "Text To Voice-এর Microsoft ও Google service-এ connection হয়নি। Internet, VPN ও Firewall পরীক্ষা করুন।"
+            ) from google_error
+        finally:
+            Path(raw_path).unlink(missing_ok=True)
+
+
+def create_text_voice(
+    text: str,
+    language: str,
+    voice_id: str,
+    output_path: str,
+    rate_percent: int = 0,
+    pitch_hz: int = 0,
+    progress: VoiceProgress | None = None,
+    cancel_event: threading.Event | None = None,
+) -> None:
+    """Create an MP3 voice from a typed script with voice, speed and pitch control."""
+    script = str(text).strip()
+    lang = language.strip().lower()
+    voice = voice_id.strip()
+    if not script:
+        raise VoiceTranslationError("প্রথমে Text To Voice ঘরে লেখা দিন।")
+    if len(script) > 100_000:
+        raise VoiceTranslationError("একবারে সর্বোচ্চ ১,০০,০০০ অক্ষরের script দিন।")
+    if lang not in TEXT_VOICE_OPTIONS:
+        raise VoiceTranslationError("নির্বাচিত Text To Voice ভাষাটি সমর্থিত নয়।")
+    allowed_voices = {item[0] for item in TEXT_VOICE_OPTIONS[lang]}
+    if voice not in allowed_voices:
+        raise VoiceTranslationError("নির্বাচিত Voice ID ভাষাটির সঙ্গে মিলছে না।")
+    rate = max(-50, min(100, int(round(rate_percent))))
+    pitch = max(-50, min(50, int(round(pitch_hz))))
+    destination = Path(output_path)
+    if destination.suffix.lower() != ".mp3":
+        destination = destination.with_suffix(".mp3")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    chunks = _split_text_voice_chunks(script)
+    if not chunks:
+        raise VoiceTranslationError("Voice তৈরি করার মতো লেখা পাওয়া যায়নি।")
+    if progress:
+        progress(0.02, "Text To Voice প্রস্তুত হচ্ছে…")
+
+    with tempfile.TemporaryDirectory(
+        prefix="bangla_text_voice_", dir=str(destination.parent)
+    ) as temp_dir:
+        part_paths: list[str] = []
+        for index, chunk in enumerate(chunks):
+            if _cancelled(cancel_event):
+                raise VoiceTranslationError("Text To Voice বাতিল করা হয়েছে।")
+            part_path = str(Path(temp_dir) / f"voice_{index:04d}.mp3")
+            _save_text_voice_chunk(
+                chunk, lang, voice, part_path, rate, pitch
+            )
+            part_paths.append(part_path)
+            if progress:
+                progress(
+                    0.05 + 0.85 * (index + 1) / len(chunks),
+                    f"Voice তৈরি হচ্ছে—{index + 1}/{len(chunks)} অংশ",
+                )
+
+        final_temp = str(Path(temp_dir) / "complete_voice.mp3")
+        if len(part_paths) == 1:
+            os.replace(part_paths[0], final_temp)
+        else:
+            concat_path = Path(temp_dir) / "voice_parts.txt"
+            concat_lines = []
+            for part_path in part_paths:
+                safe_path = Path(part_path).as_posix().replace("'", "'\\''")
+                concat_lines.append(f"file '{safe_path}'")
+            concat_path.write_text("\n".join(concat_lines), encoding="utf-8")
+            ffmpeg = bundled_tool("ffmpeg")
+            completed = subprocess.run(
+                [
+                    ffmpeg,
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(concat_path),
+                    "-vn",
+                    "-c:a",
+                    "libmp3lame",
+                    "-b:a",
+                    "192k",
+                    final_temp,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                startupinfo=_startupinfo(),
+                check=False,
+            )
+            if completed.returncode != 0 or not Path(final_temp).is_file():
+                raise VoiceTranslationError(
+                    completed.stderr.decode("utf-8", "replace").strip()
+                    or "Text To Voice-এর অংশগুলো একসঙ্গে করা যায়নি।"
+                )
+        if _cancelled(cancel_event):
+            raise VoiceTranslationError("Text To Voice বাতিল করা হয়েছে।")
+        destination.unlink(missing_ok=True)
+        os.replace(final_temp, destination)
+    if not destination.is_file() or destination.stat().st_size < 500:
+        raise VoiceTranslationError("Text To Voice MP3 তৈরি হয়নি।")
+    if progress:
+        progress(1.0, "Text To Voice MP3 তৈরি হয়েছে।")
 
 
 def _probe_audio_duration(path: str) -> float:
