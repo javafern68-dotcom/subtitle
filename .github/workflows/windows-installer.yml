@@ -187,7 +187,7 @@ jobs:
           $fallbackTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList @("--voice-fallback-self-test", "google-bengali-fallback.mp3") -Wait -PassThru
           if ($fallbackTest.ExitCode -ne 0) { throw "Packaged controlled Bengali Text To Voice self-test failed" }
           if (!(Test-Path "google-bengali-fallback.mp3")) { throw "Google Bengali fallback audio missing" }
-          Write-Host "Verified real Bengali Text To Voice with Speed and Pitch controls"
+          Write-Host "Verified real Bengali Human Emotion Voice with Speed and Pitch controls"
           $env:PYTHONUTF8 = "1"
           @'
           from bangla_subtitle_studio.voice_translate import _online_voice, _save_speech
@@ -216,12 +216,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -229,30 +229,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v3.3.0"
+          $tag = "v3.4.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe" `
-              "installer\Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe" `
+              "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V3.3.0 Clean Avro and Text To Voice" `
-              --notes "Adds a complete Text To Voice tab beside Voice Translate. Users can paste Bengali, English, Hindi, Arabic or Urdu scripts, select a natural Voice ID, control Slow/Fast speed and low/high pitch, and save one MP3. Long scripts are split at natural boundaries and joined automatically. Avro output is strictly ASCII Roman-only: Bengali hasanta, vowel marks and dotted-circle triggers are removed, with exact Bismillah, Assalamu Alaikum and Warahmatullahi openings. The packaged Windows app verifies dirty Avro cleanup and a real controlled Bengali Text To Voice MP3 before release. No API key or per-voice charge; natural voice needs internet. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V3.4.0 Human Emotion Voice" `
+              --notes "Adds Human Emotion Text To Voice presets: Natural, Happy, Loving, Angry, Sad, Serious and Storytelling, plus Emotion Strength, natural breathing pauses and a short Voice Preview. Microsoft Natural Voice quality is shown clearly; if the basic Google fallback is used, the app warns that it can sound robotic. Manual Speed and Pitch controls, clean Roman-only Avro, multilingual subtitle and Voice Translate features remain intact. No API key or per-voice charge; natural voice needs internet. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe" `
-              "installer\Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe" `
+              "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Text-To-Voice-Setup-V3.3.0
+          name: Bangla-Subtitle-Studio-Human-Emotion-Voice-Setup-V3.4.0
           path: |
-            installer/Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe
-            installer/Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.sha256.txt
+            installer/Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe
+            installer/Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

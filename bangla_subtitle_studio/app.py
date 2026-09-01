@@ -4,6 +4,7 @@ import json
 import os
 import queue
 import subprocess
+import tempfile
 import threading
 import time
 import tkinter as tk
@@ -20,6 +21,7 @@ from .subtitles import format_srt_time, parse_srt, parse_timecode, write_srt
 from .transcription import transcribe_video
 from .translation import shift_segments, shift_segments_earlier, translate_segments
 from .voice_translate import (
+    TEXT_VOICE_EMOTION_OPTIONS,
     TEXT_VOICE_OPTIONS,
     create_text_voice,
     create_voice_translated_video,
@@ -27,7 +29,7 @@ from .voice_translate import (
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "3.3.0"
+APP_VERSION = "3.4.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -112,6 +114,10 @@ class BanglaSubtitleStudio(tk.Tk):
         self.playing = False
         self.play_process: subprocess.Popen | None = None
         self.audio_process: subprocess.Popen | None = None
+        self.text_voice_preview_process: subprocess.Popen | None = None
+        self.text_voice_preview_path = str(
+            Path(tempfile.gettempdir()) / "BanglaSubtitleStudio_voice_preview.mp3"
+        )
         self.play_queue: queue.Queue[tuple[Image.Image, float] | None] = queue.Queue(maxsize=2)
         self.logo_drag_offset = (0.0, 0.0)
         self._sync_baseline: list[SubtitleSegment] = []
@@ -174,6 +180,13 @@ class BanglaSubtitleStudio(tk.Tk):
         self.text_voice_id_var = tk.StringVar(value="en-US-JennyNeural — নারী কণ্ঠ • US")
         self.text_voice_rate_var = tk.DoubleVar(value=0)
         self.text_voice_pitch_var = tk.DoubleVar(value=0)
+        self.text_voice_emotion_var = tk.StringVar(value="স্বাভাবিক (Natural)")
+        self.text_voice_emotion_strength_var = tk.DoubleVar(value=65)
+        self.text_voice_natural_pauses_var = tk.BooleanVar(value=True)
+        self.text_voice_allow_basic_fallback_var = tk.BooleanVar(value=False)
+        self.text_voice_engine_var = tk.StringVar(
+            value="Voice engine: Microsoft Natural Voice প্রস্তুত"
+        )
         self.text_voice_output_var = tk.StringVar(value="")
         self.subtitle_lead_var = tk.DoubleVar(value=0.35)
         self.sync_step_var = tk.DoubleVar(value=0.10)
@@ -291,7 +304,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             generator,
-            text="AI Model: V3.3 Clean Avro + Text To Voice + Meaning-Checked Translation",
+            text="AI Model: V3.4 Human Emotion Voice + Clean Avro + Meaning-Checked Translation",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(0, 10))
@@ -500,6 +513,25 @@ class BanglaSubtitleStudio(tk.Tk):
             state="readonly",
         )
         self.text_voice_id_combo.pack(fill="x", pady=(3, 4))
+        ttk.Label(
+            voice_card,
+            text="Emotion / বলার ধরন",
+            style="CardTitle.TLabel",
+        ).pack(anchor="w", pady=(7, 0))
+        ttk.Combobox(
+            voice_card,
+            textvariable=self.text_voice_emotion_var,
+            values=list(TEXT_VOICE_EMOTION_OPTIONS),
+            state="readonly",
+        ).pack(fill="x", pady=(3, 2))
+        self._labeled_scale(
+            voice_card,
+            "Emotion Strength: হালকা ↔ শক্তিশালী",
+            self.text_voice_emotion_strength_var,
+            0,
+            100,
+            lambda: None,
+        )
         self._labeled_scale(
             voice_card,
             "Speed: Slow (-) ↔ Fast (+) %",
@@ -516,19 +548,37 @@ class BanglaSubtitleStudio(tk.Tk):
             50,
             lambda: None,
         )
+        ttk.Checkbutton(
+            voice_card,
+            text="বাক্যের মাঝে স্বাভাবিক শ্বাস ও বিরতি রাখুন",
+            variable=self.text_voice_natural_pauses_var,
+        ).pack(anchor="w", pady=(8, 2))
+        ttk.Checkbutton(
+            voice_card,
+            text="Microsoft না চললে রোবটিক Google Basic voice ব্যবহার করতে দিন",
+            variable=self.text_voice_allow_basic_fallback_var,
+        ).pack(anchor="w", pady=(4, 2))
         ttk.Button(
             voice_card,
-            text="Speed ও Pitch Reset",
+            text="সব Voice Control Reset",
             command=self._reset_text_voice_controls,
         ).pack(fill="x", pady=(9, 0))
         ttk.Label(
             voice_card,
-            text="Natural voice তৈরির জন্য Internet লাগবে; কোনো API key বা প্রতি voice-এর টাকা লাগবে না।",
+            textvariable=self.text_voice_engine_var,
             foreground="#65E6A3",
             background="#1B2940",
             font=("Nirmala UI", 9, "bold"),
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(10, 0))
+        ttk.Label(
+            voice_card,
+            text="Free voice-এ Emotion, Speed, Pitch, Volume ও বিরতি মিলিয়ে মানুষের মতো বলার চেষ্টা করা হবে। Internet লাগবে; API key বা প্রতি voice-এর টাকা লাগবে না।",
+            foreground="#65E6A3",
+            background="#1B2940",
+            font=("Nirmala UI", 9),
+            wraplength=390,
+        ).pack(anchor="w", fill="x", pady=(5, 0))
 
         output_card = self._section(parent, "Voice MP3 Save")
         ttk.Label(output_card, text="Output MP3 file", style="CardTitle.TLabel").pack(anchor="w")
@@ -543,6 +593,20 @@ class BanglaSubtitleStudio(tk.Tk):
             width=4,
             command=self.choose_text_voice_output,
         ).pack(side="left", padx=(4, 0))
+        preview_actions = ttk.Frame(output_card, style="Card.TFrame")
+        preview_actions.pack(fill="x", pady=(0, 7))
+        self.text_voice_preview_button = ttk.Button(
+            preview_actions,
+            text="▶ ১০ সেকেন্ড Voice Preview",
+            command=self.start_text_voice_preview,
+        )
+        self.text_voice_preview_button.pack(side="left", fill="x", expand=True)
+        self.text_voice_preview_stop_button = ttk.Button(
+            preview_actions,
+            text="■ থামান",
+            command=self.stop_text_voice_preview,
+        )
+        self.text_voice_preview_stop_button.pack(side="left", padx=(6, 0))
         actions = ttk.Frame(output_card, style="Card.TFrame")
         actions.pack(fill="x")
         self.text_voice_generate_button = ttk.Button(
@@ -583,6 +647,10 @@ class BanglaSubtitleStudio(tk.Tk):
     def _reset_text_voice_controls(self) -> None:
         self.text_voice_rate_var.set(0)
         self.text_voice_pitch_var.set(0)
+        self.text_voice_emotion_var.set("স্বাভাবিক (Natural)")
+        self.text_voice_emotion_strength_var.set(65)
+        self.text_voice_natural_pauses_var.set(True)
+        self.text_voice_allow_basic_fallback_var.set(False)
 
     def _build_style_tab(self, parent: tk.Misc) -> None:
         card = self._section(parent, "ফন্ট ও লেখা")
@@ -1140,6 +1208,7 @@ class BanglaSubtitleStudio(tk.Tk):
         self.export_button.configure(state=state)
         self.voice_translate_button.configure(state=state)
         self.text_voice_generate_button.configure(state=state)
+        self.text_voice_preview_button.configure(state=state)
         self.cancel_button.configure(state="normal" if value else "disabled")
         self.voice_cancel_button.configure(state="normal" if value else "disabled")
         self.text_voice_cancel_button.configure(
@@ -1399,6 +1468,168 @@ class BanglaSubtitleStudio(tk.Tk):
         if path:
             self.text_voice_output_var.set(path)
 
+    def _selected_text_voice_settings(
+        self,
+    ) -> tuple[str, str, int, int, str, int, bool, bool]:
+        language = TEXT_VOICE_LANGUAGES.get(
+            self.text_voice_language_var.get(), "en"
+        )
+        selected_voice = self.text_voice_id_var.get().strip()
+        voice_id = selected_voice.split(" — ", 1)[0].strip()
+        emotion = TEXT_VOICE_EMOTION_OPTIONS.get(
+            self.text_voice_emotion_var.get(), "natural"
+        )
+        return (
+            language,
+            voice_id,
+            int(round(self.text_voice_rate_var.get())),
+            int(round(self.text_voice_pitch_var.get())),
+            emotion,
+            int(round(self.text_voice_emotion_strength_var.get())),
+            self.text_voice_natural_pauses_var.get(),
+            self.text_voice_allow_basic_fallback_var.get(),
+        )
+
+    @staticmethod
+    def _short_voice_preview_text(script: str, maximum: int = 260) -> str:
+        cleaned = " ".join(str(script).split()).strip()
+        if len(cleaned) <= maximum:
+            return cleaned
+        cut = max(
+            cleaned.rfind("।", 0, maximum),
+            cleaned.rfind(".", 0, maximum),
+            cleaned.rfind("?", 0, maximum),
+            cleaned.rfind("!", 0, maximum),
+        )
+        if cut < maximum // 3:
+            cut = cleaned.rfind(" ", 0, maximum)
+        return cleaned[: max(1, cut + 1)].strip()
+
+    def _set_text_voice_engine_status(self, engine: str) -> None:
+        if engine == "microsoft":
+            self.text_voice_engine_var.set(
+                "✓ Voice engine: Microsoft Natural Voice (উন্নত মান)"
+            )
+        elif engine == "mixed":
+            self.text_voice_engine_var.set(
+                "⚠ Voice engine: কিছু অংশ Google Basic fallback"
+            )
+        else:
+            self.text_voice_engine_var.set(
+                "⚠ Voice engine: Google Basic fallback—কণ্ঠ রোবটের মতো হতে পারে"
+            )
+
+    def stop_text_voice_preview(self) -> None:
+        process = self.text_voice_preview_process
+        if process and process.poll() is None:
+            try:
+                process.terminate()
+            except OSError:
+                pass
+        self.text_voice_preview_process = None
+
+    def start_text_voice_preview(self) -> None:
+        if self.busy:
+            return
+        script = self._short_voice_preview_text(
+            self.text_voice_text.get("1.0", "end-1c")
+        )
+        if not script:
+            messagebox.showinfo(
+                APP_NAME,
+                "আগে Text To Voice ঘরে কিছু লেখা দিন।",
+                parent=self,
+            )
+            return
+        (
+            language,
+            voice_id,
+            rate,
+            pitch,
+            emotion,
+            emotion_strength,
+            natural_pauses,
+            allow_basic_fallback,
+        ) = self._selected_text_voice_settings()
+        if not voice_id:
+            messagebox.showerror(APP_NAME, "একটি Voice ID নির্বাচন করুন।", parent=self)
+            return
+        self.stop_text_voice_preview()
+        preview_path = self.text_voice_preview_path
+        Path(preview_path).unlink(missing_ok=True)
+        self._set_busy(True)
+        self.busy_cancel.clear()
+
+        def progress(value: float, message: str) -> None:
+            self.after(0, lambda: self._update_progress(value, message))
+
+        def worker() -> None:
+            try:
+                engine = create_text_voice(
+                    text=script,
+                    language=language,
+                    voice_id=voice_id,
+                    output_path=preview_path,
+                    rate_percent=rate,
+                    pitch_hz=pitch,
+                    emotion=emotion,
+                    emotion_strength=emotion_strength,
+                    natural_pauses=natural_pauses,
+                    allow_basic_fallback=allow_basic_fallback,
+                    progress=progress,
+                    cancel_event=self.busy_cancel,
+                )
+                self.after(
+                    0,
+                    lambda: self._finish_text_voice_preview(
+                        preview_path, engine, None
+                    ),
+                )
+            except Exception as exc:
+                self.after(
+                    0,
+                    lambda error=exc: self._finish_text_voice_preview(
+                        preview_path, "", error
+                    ),
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_text_voice_preview(
+        self,
+        preview_path: str,
+        engine: str,
+        error: Exception | None,
+    ) -> None:
+        self._set_busy(False)
+        if error:
+            self.status_var.set(str(error))
+            messagebox.showerror("Voice Preview হয়নি", str(error), parent=self)
+            return
+        self._set_text_voice_engine_status(engine)
+        try:
+            ffplay = bundled_tool("ffplay")
+            self.text_voice_preview_process = subprocess.Popen(
+                [
+                    ffplay,
+                    "-nodisp",
+                    "-autoexit",
+                    "-loglevel",
+                    "quiet",
+                    preview_path,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                startupinfo=_startupinfo(),
+            )
+        except (MediaError, OSError) as exc:
+            messagebox.showerror(
+                APP_NAME, f"Voice তৈরি হয়েছে, কিন্তু Preview চালানো যায়নি:\n{exc}", parent=self
+            )
+            return
+        self.progress_var.set(100)
+        self.status_var.set("Emotion Voice Preview চলছে…")
+
     def start_text_voice_generation(self) -> None:
         if self.busy:
             return
@@ -1410,11 +1641,16 @@ class BanglaSubtitleStudio(tk.Tk):
                 parent=self,
             )
             return
-        language = TEXT_VOICE_LANGUAGES.get(
-            self.text_voice_language_var.get(), "en"
-        )
-        selected_voice = self.text_voice_id_var.get().strip()
-        voice_id = selected_voice.split(" — ", 1)[0].strip()
+        (
+            language,
+            voice_id,
+            rate,
+            pitch,
+            emotion,
+            emotion_strength,
+            natural_pauses,
+            allow_basic_fallback,
+        ) = self._selected_text_voice_settings()
         if not voice_id:
             messagebox.showerror(
                 APP_NAME, "একটি Voice ID নির্বাচন করুন।", parent=self
@@ -1429,8 +1665,7 @@ class BanglaSubtitleStudio(tk.Tk):
         if not output.lower().endswith(".mp3"):
             output += ".mp3"
             self.text_voice_output_var.set(output)
-        rate = int(round(self.text_voice_rate_var.get()))
-        pitch = int(round(self.text_voice_pitch_var.get()))
+        self.stop_text_voice_preview()
         self._set_busy(True)
         self.busy_cancel.clear()
 
@@ -1439,42 +1674,57 @@ class BanglaSubtitleStudio(tk.Tk):
 
         def worker() -> None:
             try:
-                create_text_voice(
+                engine = create_text_voice(
                     text=script,
                     language=language,
                     voice_id=voice_id,
                     output_path=output,
                     rate_percent=rate,
                     pitch_hz=pitch,
+                    emotion=emotion,
+                    emotion_strength=emotion_strength,
+                    natural_pauses=natural_pauses,
+                    allow_basic_fallback=allow_basic_fallback,
                     progress=progress,
                     cancel_event=self.busy_cancel,
                 )
                 self.after(
-                    0, lambda: self._finish_text_voice_generation(output, None)
+                    0,
+                    lambda: self._finish_text_voice_generation(
+                        output, engine, None
+                    ),
                 )
             except Exception as exc:
                 self.after(
                     0,
                     lambda error=exc: self._finish_text_voice_generation(
-                        output, error
+                        output, "", error
                     ),
                 )
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _finish_text_voice_generation(
-        self, output: str, error: Exception | None
+        self, output: str, engine: str, error: Exception | None
     ) -> None:
         self._set_busy(False)
         if error:
             self.status_var.set(str(error))
             messagebox.showerror("Text To Voice হয়নি", str(error), parent=self)
             return
+        self._set_text_voice_engine_status(engine)
         self.progress_var.set(100)
-        self.status_var.set("Text To Voice MP3 তৈরি হয়েছে।")
+        fallback_note = ""
+        if engine != "microsoft":
+            fallback_note = (
+                "\n\nসতর্কতা: Microsoft Natural Voice পাওয়া যায়নি, তাই Google Basic "
+                "fallback ব্যবহৃত হয়েছে। কণ্ঠ রোবটের মতো শোনালে Internet/VPN/Firewall "
+                "ঠিক করে আবার Preview শুনুন।"
+            )
+        self.status_var.set("Human Emotion Text To Voice MP3 তৈরি হয়েছে।")
         if messagebox.askyesno(
             "Text To Voice সম্পন্ন",
-            f"Voice তৈরি হয়েছে:\n{output}\n\nFolder খুলবেন?",
+            f"Voice তৈরি হয়েছে:\n{output}{fallback_note}\n\nFolder খুলবেন?",
             parent=self,
         ):
             self._open_folder(output)
@@ -1747,6 +1997,8 @@ class BanglaSubtitleStudio(tk.Tk):
             return
         self.busy_cancel.set()
         self.stop_playback()
+        self.stop_text_voice_preview()
+        Path(self.text_voice_preview_path).unlink(missing_ok=True)
         self.destroy()
 
 

@@ -1,4 +1,16 @@
-# Bangla Subtitle Studio V3.3.0 — Clean Avro + Text To Voice
+# Bangla Subtitle Studio V3.4.0 — Human Emotion Text To Voice
+
+## V3.4.0-এর মানবসদৃশ Emotion Voice
+
+- Text To Voice-এ `Natural`, `Happy`, `Loving`, `Angry`, `Sad`, `Serious` ও `Storytelling` বলার ধরন।
+- Emotion কতটা হালকা বা শক্তিশালী হবে তার আলাদা `Emotion Strength` control।
+- বাক্যের মাঝে স্বাভাবিক শ্বাস ও ছোট বিরতি; দীর্ঘ script আর একটানা সমান সুরে পড়বে না।
+- সম্পূর্ণ MP3 তৈরির আগে `১০ সেকেন্ড Voice Preview` শুনে Voice ID ও Emotion পরীক্ষা করা যাবে।
+- Software এখন ব্যবহৃত engine পরিষ্কার দেখায়: `Microsoft Natural Voice` অথবা `Google Basic fallback`।
+- Microsoft service না চললে Google Basic voice ব্যবহারের সময় সতর্ক করবে, কারণ সেই কণ্ঠ রোবটের মতো শোনাতে পারে।
+- উন্নত মানের জন্য Google Basic fallback default-এ বন্ধ; চাইলে checkbox চালু করে ব্যবহার করা যাবে।
+- বাংলা, English, Hindi, Arabic ও Urdu, Speed, Pitch এবং আগের সব Subtitle/Voice Translate সুবিধা অক্ষুণ্ণ আছে।
+- API key বা প্রতি voice-এর টাকা লাগে না; Natural Voice তৈরির সময় Internet লাগবে।
 
 ## V3.3.0-এর নতুন Text To Voice
 
@@ -100,12 +112,12 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe` download করুন।
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V3.3.0 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V3.4.0 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Voice Translate করার নিয়ম
 

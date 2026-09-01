@@ -30,12 +30,15 @@ from bangla_subtitle_studio.transcription import (
     transcribe_audio_file,
 )
 from bangla_subtitle_studio.voice_translate import (
+    TEXT_VOICE_EMOTION_OPTIONS,
     TEXT_VOICE_OPTIONS,
     VOICE_SAMPLE_RATE,
     _atempo_expression,
     _build_timed_voice_track,
+    _emotion_voice_controls,
     _online_voice,
     _save_speech,
+    _save_text_voice_chunk,
     _select_voice,
     _signed_control,
     _split_text_voice_chunks,
@@ -488,6 +491,11 @@ class UIRegressionTests(unittest.TestCase):
         self.assertIn("Voice ID", source)
         self.assertIn("Speed: Slow (-) ↔ Fast (+) %", source)
         self.assertIn("Pitch: ভারী (-) ↔ চিকন (+) Hz", source)
+        self.assertIn("Emotion / বলার ধরন", source)
+        self.assertIn("Emotion Strength: হালকা ↔ শক্তিশালী", source)
+        self.assertIn("১০ সেকেন্ড Voice Preview", source)
+        self.assertIn("Google Basic fallback—কণ্ঠ রোবটের মতো হতে পারে", source)
+        self.assertIn("রোবটিক Google Basic voice ব্যবহার করতে দিন", source)
         self.assertIn("create_text_voice", source)
 
 
@@ -511,6 +519,17 @@ class VoiceTranslationTests(unittest.TestCase):
         self.assertEqual(_signed_control(25, "%"), "+25%")
         self.assertEqual(_signed_control(-12, "Hz"), "-12Hz")
 
+    def test_human_emotion_presets_adjust_safe_voice_controls(self) -> None:
+        self.assertEqual(TEXT_VOICE_EMOTION_OPTIONS["রাগান্বিত (Angry)"], "angry")
+        self.assertEqual(
+            _emotion_voice_controls("happy", 100, 0, 0),
+            (10, 7, 4, 100),
+        )
+        self.assertEqual(
+            _emotion_voice_controls("loving", 0, 5, -2),
+            (5, -2, 0, 120),
+        )
+
     @mock.patch("bangla_subtitle_studio.voice_translate._save_text_voice_chunk")
     def test_text_voice_creates_complete_mp3(self, save_chunk: mock.Mock) -> None:
         def write_audio(
@@ -520,22 +539,55 @@ class VoiceTranslationTests(unittest.TestCase):
             output: str,
             _rate: int,
             _pitch: int,
-        ) -> None:
+            _volume: int,
+            _allow_basic_fallback: bool,
+        ) -> str:
             Path(output).write_bytes(b"ID3" + b"\x01" * 1_000)
+            return "microsoft"
 
         save_chunk.side_effect = write_audio
         with tempfile.TemporaryDirectory() as temp_dir:
             output = str(Path(temp_dir) / "voice.mp3")
-            create_text_voice(
+            engine = create_text_voice(
                 "This is a complete voice test.",
                 "en",
                 "en-US-JennyNeural",
                 output,
                 rate_percent=20,
                 pitch_hz=-5,
+                emotion="storytelling",
+                emotion_strength=70,
             )
             self.assertGreater(Path(output).stat().st_size, 500)
+            self.assertEqual(engine, "microsoft")
         save_chunk.assert_called_once()
+
+    @mock.patch("bangla_subtitle_studio.voice_translate._save_text_voice_chunk")
+    def test_text_voice_reports_robotic_google_fallback(self, save_chunk: mock.Mock) -> None:
+        def write_google(
+            _text: str,
+            _language: str,
+            _voice_id: str,
+            output: str,
+            _rate: int,
+            _pitch: int,
+            _volume: int,
+            _allow_basic_fallback: bool,
+        ) -> str:
+            Path(output).write_bytes(b"ID3" + b"\x02" * 1_000)
+            return "google"
+
+        save_chunk.side_effect = write_google
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = str(Path(temp_dir) / "fallback.mp3")
+            engine = create_text_voice(
+                "এটি একটি পরিষ্কার বাংলা কণ্ঠের পরীক্ষা।",
+                "bn",
+                "bn-BD-NabanitaNeural",
+                output,
+                emotion="loving",
+            )
+        self.assertEqual(engine, "google")
 
     def test_preferred_bengali_female_voice_is_selected(self) -> None:
         voices = [
@@ -621,6 +673,37 @@ class VoiceTranslationTests(unittest.TestCase):
             with mock.patch.dict(sys.modules, {"gtts": gtts_package}):
                 _save_speech("আপনি কেমন আছেন", "google:bn", str(output))
             self.assertEqual(output.read_bytes(), b"google voice")
+
+    def test_robotic_text_voice_fallback_is_blocked_by_default(self) -> None:
+        edge_module = types.ModuleType("edge_tts")
+
+        class FailedCommunicate:
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+            def save_sync(self, _output: str) -> None:
+                raise OSError("Microsoft voice unavailable")
+
+        edge_module.Communicate = FailedCommunicate  # type: ignore[attr-defined]
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            mock.patch.dict(sys.modules, {"edge_tts": edge_module}),
+            mock.patch(
+                "bangla_subtitle_studio.voice_translate._save_google_speech"
+            ) as google,
+        ):
+            with self.assertRaisesRegex(Exception, "রোবটের মতো Google Basic"):
+                _save_text_voice_chunk(
+                    "মানবসদৃশ কণ্ঠ পরীক্ষা",
+                    "bn",
+                    "bn-BD-NabanitaNeural",
+                    str(Path(temp_dir) / "voice.mp3"),
+                    0,
+                    0,
+                    0,
+                    allow_basic_fallback=False,
+                )
+        google.assert_not_called()
 
     @mock.patch("bangla_subtitle_studio.voice_translate._mux_dubbed_video")
     @mock.patch("bangla_subtitle_studio.voice_translate._build_timed_voice_track")

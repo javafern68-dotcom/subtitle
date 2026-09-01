@@ -1,4 +1,13 @@
-# Bangla Subtitle Studio V3.3.0 Clean Avro + Text To Voice
+# Bangla Subtitle Studio V3.4.0 Human Emotion Text To Voice
+
+## V3.4.0 human emotion voice
+
+- Natural, Happy, Loving, Angry, Sad, Serious and Storytelling delivery presets.
+- Emotion Strength, sentence-aware breathing pauses, Speed and Pitch controls.
+- Short Voice Preview before generating the complete MP3.
+- The UI identifies Microsoft Natural Voice and explicitly warns when the more robotic Google Basic fallback was required.
+- Basic fallback is disabled by default so a connection failure cannot silently produce a robotic final voice; it remains available through an explicit checkbox.
+- Bengali, English, Hindi, Arabic and Urdu Text To Voice remain API-key-free and have no per-voice charge; internet is required.
 
 ## V3.3.0 highlights
 
@@ -96,7 +105,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Text_To_Voice_Setup_V3.3.0.exe` from the `v3.3.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe` from the `v3.4.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 

@@ -60,6 +60,32 @@ TEXT_VOICE_OPTIONS = {
         ("ur-PK-AsadNeural", "পুরুষ কণ্ঠ"),
     ],
 }
+TEXT_VOICE_EMOTION_OPTIONS = {
+    "স্বাভাবিক (Natural)": "natural",
+    "আনন্দিত (Happy)": "happy",
+    "ভালোবাসা / কোমল (Loving)": "loving",
+    "রাগান্বিত (Angry)": "angry",
+    "দুঃখিত (Sad)": "sad",
+    "গম্ভীর (Serious)": "serious",
+    "গল্প বলা (Storytelling)": "storytelling",
+}
+
+# The free Edge endpoint used by edge-tts exposes prosody controls rather than
+# Azure's paid, voice-specific express-as styles.  These presets deliberately
+# stay inside conservative ranges so Bengali and other non-English voices remain
+# clear while still sounding noticeably different from the neutral delivery.
+_TEXT_VOICE_EMOTION_PRESETS = {
+    # rate %, pitch Hz, volume %, pause between generated chunks in ms
+    "natural": (0, 0, 0, 140),
+    "happy": (10, 7, 4, 100),
+    "loving": (-8, 3, -3, 230),
+    "angry": (12, -2, 8, 75),
+    "sad": (-14, -6, -6, 280),
+    "serious": (-7, -8, 3, 190),
+    "storytelling": (-4, 1, 1, 220),
+}
+
+
 def _cancelled(cancel_event: threading.Event | None) -> bool:
     return bool(cancel_event and cancel_event.is_set())
 
@@ -191,6 +217,7 @@ def _apply_google_voice_controls(
     output_path: str,
     rate_percent: int,
     pitch_hz: int,
+    volume_percent: int = 0,
 ) -> None:
     speed = max(0.50, min(2.0, 1.0 + rate_percent / 100.0))
     pitch_factor = max(0.80, min(1.20, 1.0 + pitch_hz / 300.0))
@@ -206,6 +233,9 @@ def _apply_google_voice_controls(
         )
     if abs(speed - 1.0) > 0.001:
         filters.append(_atempo_expression(speed))
+    if volume_percent:
+        volume_factor = max(0.35, min(1.75, 1.0 + volume_percent / 100.0))
+        filters.append(f"volume={volume_factor:.4f}")
     if not filters:
         os.replace(source_path, output_path)
         return
@@ -247,7 +277,9 @@ def _save_text_voice_chunk(
     output_path: str,
     rate_percent: int,
     pitch_hz: int,
-) -> None:
+    volume_percent: int = 0,
+    allow_basic_fallback: bool = True,
+) -> str:
     Path(output_path).unlink(missing_ok=True)
     try:
         import edge_tts
@@ -257,16 +289,27 @@ def _save_text_voice_chunk(
             voice=voice_id,
             rate=_signed_control(rate_percent, "%"),
             pitch=_signed_control(pitch_hz, "Hz"),
+            volume=_signed_control(volume_percent, "%"),
         ).save_sync(output_path)
         if Path(output_path).is_file() and Path(output_path).stat().st_size > 500:
-            return
+            return "microsoft"
         raise VoiceTranslationError("Microsoft voice file খালি হয়েছে।")
     except Exception as edge_error:
+        if not allow_basic_fallback:
+            raise VoiceTranslationError(
+                "Microsoft Natural Voice-এ connection হয়নি। রোবটের মতো Google Basic voice "
+                "ইচ্ছাকৃতভাবে ব্যবহার করা হয়নি। Internet চালু রেখে VPN বন্ধ করুন, Firewall-এ "
+                "software-কে অনুমতি দিন এবং আবার Voice Preview চাপুন।"
+            ) from edge_error
         raw_path = str(Path(output_path).with_suffix(".google.mp3"))
         try:
             _save_google_speech(text, language, raw_path)
             _apply_google_voice_controls(
-                raw_path, output_path, rate_percent, pitch_hz
+                raw_path,
+                output_path,
+                rate_percent,
+                pitch_hz,
+                volume_percent,
             )
         except Exception as google_error:
             raise VoiceTranslationError(
@@ -274,6 +317,61 @@ def _save_text_voice_chunk(
             ) from google_error
         finally:
             Path(raw_path).unlink(missing_ok=True)
+        return "google"
+
+
+def _emotion_voice_controls(
+    emotion: str,
+    strength: int,
+    rate_percent: int,
+    pitch_hz: int,
+) -> tuple[int, int, int, int]:
+    """Combine manual controls with a safe, language-independent emotion preset."""
+    preset = str(emotion).strip().lower() or "natural"
+    if preset not in _TEXT_VOICE_EMOTION_PRESETS:
+        raise VoiceTranslationError("নির্বাচিত Emotion/বলার ধরনটি সমর্থিত নয়।")
+    amount = max(0, min(100, int(round(strength)))) / 100.0
+    extra_rate, extra_pitch, extra_volume, pause_ms = _TEXT_VOICE_EMOTION_PRESETS[preset]
+    rate = max(-50, min(100, int(round(rate_percent + extra_rate * amount))))
+    pitch = max(-50, min(50, int(round(pitch_hz + extra_pitch * amount))))
+    volume = max(-50, min(50, int(round(extra_volume * amount))))
+    # Emotion Strength also controls the breathing room without producing the
+    # long, unnatural gaps that made earlier translated voices sound broken.
+    natural_pause = int(round(120 + (pause_ms - 120) * amount))
+    return rate, pitch, volume, max(60, min(320, natural_pause))
+
+
+def _create_silence_mp3(output_path: str, duration_ms: int) -> None:
+    ffmpeg = bundled_tool("ffmpeg")
+    completed = subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=24000:cl=mono",
+            "-t",
+            f"{max(0.04, duration_ms / 1000.0):.3f}",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "192k",
+            output_path,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        startupinfo=_startupinfo(),
+        check=False,
+    )
+    if completed.returncode != 0 or not Path(output_path).is_file():
+        raise VoiceTranslationError(
+            completed.stderr.decode("utf-8", "replace").strip()
+            or "Natural voice-এর বিরতি তৈরি করা যায়নি।"
+        )
 
 
 def create_text_voice(
@@ -283,10 +381,14 @@ def create_text_voice(
     output_path: str,
     rate_percent: int = 0,
     pitch_hz: int = 0,
+    emotion: str = "natural",
+    emotion_strength: int = 65,
+    natural_pauses: bool = True,
+    allow_basic_fallback: bool = False,
     progress: VoiceProgress | None = None,
     cancel_event: threading.Event | None = None,
-) -> None:
-    """Create an MP3 voice from a typed script with voice, speed and pitch control."""
+) -> str:
+    """Create an MP3 voice and return microsoft, google or mixed engine status."""
     script = str(text).strip()
     lang = language.strip().lower()
     voice = voice_id.strip()
@@ -299,13 +401,19 @@ def create_text_voice(
     allowed_voices = {item[0] for item in TEXT_VOICE_OPTIONS[lang]}
     if voice not in allowed_voices:
         raise VoiceTranslationError("নির্বাচিত Voice ID ভাষাটির সঙ্গে মিলছে না।")
-    rate = max(-50, min(100, int(round(rate_percent))))
-    pitch = max(-50, min(50, int(round(pitch_hz))))
+    rate, pitch, volume, pause_ms = _emotion_voice_controls(
+        emotion,
+        emotion_strength,
+        int(round(rate_percent)),
+        int(round(pitch_hz)),
+    )
     destination = Path(output_path)
     if destination.suffix.lower() != ".mp3":
         destination = destination.with_suffix(".mp3")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    chunks = _split_text_voice_chunks(script)
+    # Shorter chunks give the neural voice more sentence context and reduce the
+    # flat, breathless sound of feeding an entire page in one request.
+    chunks = _split_text_voice_chunks(script, max_chars=1_000)
     if not chunks:
         raise VoiceTranslationError("Voice তৈরি করার মতো লেখা পাওয়া যায়নি।")
     if progress:
@@ -315,18 +423,33 @@ def create_text_voice(
         prefix="bangla_text_voice_", dir=str(destination.parent)
     ) as temp_dir:
         part_paths: list[str] = []
+        engines: list[str] = []
         for index, chunk in enumerate(chunks):
             if _cancelled(cancel_event):
                 raise VoiceTranslationError("Text To Voice বাতিল করা হয়েছে।")
             part_path = str(Path(temp_dir) / f"voice_{index:04d}.mp3")
-            _save_text_voice_chunk(
-                chunk, lang, voice, part_path, rate, pitch
+            engine = _save_text_voice_chunk(
+                chunk,
+                lang,
+                voice,
+                part_path,
+                rate,
+                pitch,
+                volume,
+                allow_basic_fallback,
             )
+            if engine in {"microsoft", "google"}:
+                engines.append(engine)
             part_paths.append(part_path)
             if progress:
+                quality = (
+                    "Microsoft Natural Voice"
+                    if engine == "microsoft"
+                    else "Google Basic fallback"
+                )
                 progress(
                     0.05 + 0.85 * (index + 1) / len(chunks),
-                    f"Voice তৈরি হচ্ছে—{index + 1}/{len(chunks)} অংশ",
+                    f"{quality}—{index + 1}/{len(chunks)} অংশ",
                 )
 
         final_temp = str(Path(temp_dir) / "complete_voice.mp3")
@@ -335,9 +458,15 @@ def create_text_voice(
         else:
             concat_path = Path(temp_dir) / "voice_parts.txt"
             concat_lines = []
-            for part_path in part_paths:
+            silence_path = Path(temp_dir) / "natural_pause.mp3"
+            if natural_pauses:
+                _create_silence_mp3(str(silence_path), pause_ms)
+            for index, part_path in enumerate(part_paths):
                 safe_path = Path(part_path).as_posix().replace("'", "'\\''")
                 concat_lines.append(f"file '{safe_path}'")
+                if natural_pauses and index + 1 < len(part_paths):
+                    safe_silence = silence_path.as_posix().replace("'", "'\\''")
+                    concat_lines.append(f"file '{safe_silence}'")
             concat_path.write_text("\n".join(concat_lines), encoding="utf-8")
             ffmpeg = bundled_tool("ffmpeg")
             completed = subprocess.run(
@@ -378,6 +507,12 @@ def create_text_voice(
         raise VoiceTranslationError("Text To Voice MP3 তৈরি হয়নি।")
     if progress:
         progress(1.0, "Text To Voice MP3 তৈরি হয়েছে।")
+    detected = set(engines)
+    if detected == {"google"}:
+        return "google"
+    if detected == {"microsoft", "google"}:
+        return "mixed"
+    return "microsoft"
 
 
 def _probe_audio_duration(path: str) -> float:

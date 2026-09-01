@@ -184,16 +184,21 @@ def voice_translate_self_test(input_video: str, output_video: str) -> None:
 
 
 def voice_fallback_self_test(output_audio: str) -> None:
-    create_text_voice(
+    engine = create_text_voice(
         "আপনি কেমন আছেন? এটি Text To Voice পরীক্ষা।",
         "bn",
         "bn-BD-NabanitaNeural",
         output_audio,
         rate_percent=20,
         pitch_hz=8,
+        emotion="loving",
+        emotion_strength=75,
+        allow_basic_fallback=True,
     )
     if not Path(output_audio).is_file() or Path(output_audio).stat().st_size < 1_000:
         raise RuntimeError("Controlled Bengali Text To Voice MP3 was not created")
+    if engine not in {"microsoft", "google", "mixed"}:
+        raise RuntimeError(f"Text To Voice engine status is invalid: {engine}")
 
 
 if __name__ == "__main__":
