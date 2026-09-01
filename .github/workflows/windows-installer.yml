@@ -216,12 +216,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -229,30 +229,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v3.2.1"
+          $tag = "v3.2.2"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.exe" `
-              "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe" `
+              "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V3.2.1 Natural Synced Dubbing" `
-              --notes "Hindi-to-Bengali dubbing timing fix. Source speech is kept in short timed phrases instead of reconnecting it into twelve-second blocks. A translated phrase keeps a natural rate when short and is fitted completely without trimming final words when long. Source pauses remain in place, generic Whisper prompts are removed, mixed-script translations are rejected before voice synthesis, and frequent literal Hindi-to-Bengali agreement errors are normalized into natural spoken Bengali. No API key or per-video charge. The packaged Windows app must pass Hindi-to-Bengali meaning, short-phrase, complete-audio and internal-silence checks before release. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V3.2.2 Resilient Offline Translation" `
+              --notes "Fixes the Offline Translation single-sentence language error. When one M2M100 candidate is invalid, the app now tries every valid candidate, retries that sentence with a wider beam, and then uses an offline English semantic bridge when needed. Roman person and brand names inside Bengali/Hindi/Arabic text are accepted without weakening retained-source-script checks. A final audible best-effort phrase prevents one difficult name or mixed sentence from cancelling the complete video. The packaged Windows app verifies candidate recovery, proper-name validation, Hindi-to-Bengali meaning, short phrases, complete audio and internal silence before release. No API key or per-video charge. Installs over earlier versions without uninstalling."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.exe" `
-              "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe" `
+              "installer\Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Natural-Synced-Dubbing-Setup-V3.2.1
+          name: Bangla-Subtitle-Studio-Natural-Synced-Dubbing-Setup-V3.2.2
           path: |
-            installer/Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.exe
-            installer/Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.sha256.txt
+            installer/Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe
+            installer/Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

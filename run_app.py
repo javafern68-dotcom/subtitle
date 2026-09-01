@@ -10,7 +10,11 @@ from bangla_subtitle_studio.app import main
 from bangla_subtitle_studio.media import extract_audio_chunk, probe_video
 from bangla_subtitle_studio.models import SubtitleSegment
 from bangla_subtitle_studio.subtitles import parse_srt
-from bangla_subtitle_studio.translation import translate_segments
+from bangla_subtitle_studio.translation import (
+    _select_valid_target_candidate,
+    _valid_target_script,
+    translate_segments,
+)
 from bangla_subtitle_studio.voice_translate import (
     _save_speech,
     create_voice_translated_video,
@@ -53,6 +57,20 @@ def translation_self_test() -> None:
         raise RuntimeError(
             f"Hindi-to-Bengali translation self-test failed: {hindi_to_bangla.text}"
         )
+    recovered = _select_valid_target_candidate(
+        "आप कैसे हैं?",
+        ["आप कैसे हैं?", "আপনি কেমন আছেন?"],
+        ["आप कैसे हैं?", "आप कैसे हैं?"],
+        "bn",
+    )
+    if recovered != "আপনি কেমন আছেন?":
+        raise RuntimeError(f"Valid offline fallback candidate was not recovered: {recovered}")
+    if not _valid_target_script(
+        "यह OpenAI वीडियो है",
+        "এটি OpenAI দিয়ে তৈরি একটি ভিডিও",
+        "bn",
+    ):
+        raise RuntimeError("Mixed Bengali and proper-name validation self-test failed")
 
 
 def srt_self_test(path: str) -> None:

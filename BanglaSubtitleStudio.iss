@@ -1,5 +1,5 @@
 #define MyAppName "Bangla Subtitle Studio"
-#define MyAppVersion "3.2.1"
+#define MyAppVersion "3.2.2"
 #define MyAppPublisher "Bangla Subtitle Studio"
 #define MyAppExeName "Bangla Subtitle Studio.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 OutputDir=installer
-OutputBaseFilename=Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1
+OutputBaseFilename=Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

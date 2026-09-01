@@ -42,9 +42,11 @@ from bangla_subtitle_studio.translation import (
     _google_translate_text,
     _google_translate_texts,
     _ensure_runtime_streams,
+    _best_effort_target_candidate,
     _normalize_target_fluency,
     _preserve_greeting,
     _select_semantic_candidate,
+    _select_valid_target_candidate,
     _valid_target_script,
     _format_avro_text,
     _title_case_latin_words,
@@ -262,6 +264,32 @@ class TranslationAndSyncTests(unittest.TestCase):
                 "bn",
             )
         )
+
+    def test_valid_bengali_with_roman_brand_name_is_not_rejected(self) -> None:
+        self.assertTrue(
+            _valid_target_script(
+                "यह OpenAI वीडियो है",
+                "এটি OpenAI দিয়ে তৈরি একটি ভিডিও",
+                "bn",
+            )
+        )
+
+    def test_valid_second_candidate_is_used_instead_of_aborting_video(self) -> None:
+        selected = _select_valid_target_candidate(
+            "आप कैसे हैं?",
+            ["आप कैसे हैं?", "আপনি কেমন আছেন?"],
+            ["आप कैसे हैं?", "आप कैसे हैं?"],
+            "bn",
+        )
+        self.assertEqual(selected, "আপনি কেমন আছেন?")
+
+    def test_best_effort_keeps_a_difficult_phrase_audible(self) -> None:
+        selected = _best_effort_target_candidate(
+            "OpenAI वीडियो",
+            ["OpenAI", "OpenAI বাংলা ভিডিও"],
+            "bn",
+        )
+        self.assertEqual(selected, "OpenAI বাংলা ভিডিও")
 
     @mock.patch("bangla_subtitle_studio.translation.urllib.request.urlopen")
     def test_google_translation_response_is_parsed_and_validated(

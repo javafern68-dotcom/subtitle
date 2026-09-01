@@ -23,7 +23,7 @@ from .voice_translate import create_voice_translated_video
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "3.2.1"
+APP_VERSION = "3.2.2"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",

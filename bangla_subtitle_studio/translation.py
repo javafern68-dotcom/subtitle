@@ -226,21 +226,115 @@ def _normalize_target_fluency(text: str, target: str) -> str:
 
 
 def _valid_target_script(source: str, translated: str, target: str) -> bool:
+    """Accept real target-language text while allowing names such as OpenAI or YouTube."""
     clean = " ".join(str(translated).split()).strip()
     if not clean or len(clean) > 5_000 or "<html" in clean.casefold():
         return False
     pattern = _TARGET_SCRIPT_PATTERNS.get(target)
-    if pattern and not pattern.search(clean):
+    if not pattern or not pattern.search(clean):
+        return pattern is None and _comparison_text(clean) != _comparison_text(source)
+
+    letters = [character for character in clean if character.isalpha()]
+    target_letters = sum(bool(pattern.fullmatch(character)) for character in letters)
+    if not letters or target_letters == 0:
         return False
-    if pattern:
-        letters = [character for character in clean if character.isalpha()]
-        target_letters = sum(bool(pattern.fullmatch(character)) for character in letters)
-        # A single target-language letter is not enough for dubbing. Reject a
-        # response that is mostly still written in the source alphabet so the
-        # voice engine never receives mixed Hindi/Bengali/English garbage.
-        if letters and target_letters / len(letters) < 0.55:
+
+    # Roman brand/person names are common inside Bengali/Hindi/Arabic sentences.
+    # Requiring 55% of *all* letters to use the target alphabet rejected valid
+    # phrases such as "OpenAI দিয়ে ভিডিওটি তৈরি হয়েছে". Keep a meaningful target
+    # presence, but judge retained source alphabets separately.
+    minimum_share = 0.55 if target == "en" else 0.25
+    if target_letters / len(letters) < minimum_share:
+        return False
+
+    source_clean = " ".join(str(source).split()).strip()
+    target_pattern_text = pattern.pattern
+    source_pattern: re.Pattern[str] | None = None
+    source_pattern_count = 0
+    seen_patterns: set[str] = set()
+    for code, candidate_pattern in _TARGET_SCRIPT_PATTERNS.items():
+        pattern_text = candidate_pattern.pattern
+        if pattern_text in seen_patterns or pattern_text == target_pattern_text:
+            continue
+        seen_patterns.add(pattern_text)
+        # Latin names are allowed inside non-Latin target text; the share check
+        # above still rejects an almost entirely English sentence.
+        if target != "en" and code == "en":
+            continue
+        count = len(candidate_pattern.findall(source_clean))
+        if count > source_pattern_count:
+            source_pattern = candidate_pattern
+            source_pattern_count = count
+    if source_pattern is not None and source_pattern_count:
+        retained_source_letters = sum(
+            bool(source_pattern.fullmatch(character)) for character in letters
+        )
+        if retained_source_letters > target_letters:
             return False
-    return _comparison_text(clean) != _comparison_text(source)
+
+    if _comparison_text(clean) == _comparison_text(source):
+        source_letters = [character for character in source_clean if character.isalpha()]
+        source_target_letters = sum(
+            bool(pattern.fullmatch(character)) for character in source_letters
+        )
+        # Unchanged target-script names/acronyms are safe; unchanged source-language
+        # sentences are not.
+        return bool(source_letters) and source_target_letters / len(source_letters) >= 0.55
+    return True
+
+
+def _prepare_target_candidate(source: str, candidate: str, target: str) -> str:
+    output = _preserve_greeting(source, str(candidate).strip(), target)
+    output = _normalize_target_fluency(output, target)
+    return _title_case_latin_words(output) if target == "en" else output
+
+
+def _select_valid_target_candidate(
+    source: str,
+    candidates: list[str],
+    back_translations: list[str],
+    target: str,
+) -> str:
+    """Prefer the meaning-preserving candidate, but only among safe target text."""
+    prepared = [
+        _prepare_target_candidate(source, candidate, target) for candidate in candidates
+    ]
+    valid_indices = [
+        index
+        for index, candidate in enumerate(prepared)
+        if _valid_target_script(source, candidate, target)
+    ]
+    if not valid_indices:
+        return ""
+    valid_candidates = [prepared[index] for index in valid_indices]
+    valid_backs = [
+        back_translations[index] if index < len(back_translations) else ""
+        for index in valid_indices
+    ]
+    return _select_semantic_candidate(source, valid_candidates, valid_backs)
+
+
+def _best_effort_target_candidate(
+    source: str, candidates: list[str], target: str
+) -> str:
+    """Keep one difficult name/phrase audible instead of aborting the whole video."""
+    prepared = [
+        _prepare_target_candidate(source, candidate, target)
+        for candidate in candidates
+        if str(candidate).strip()
+    ]
+    pattern = _TARGET_SCRIPT_PATTERNS.get(target)
+    if prepared and pattern:
+        return max(
+            prepared,
+            key=lambda value: (
+                len(pattern.findall(value)),
+                -abs(len(value) - len(source)),
+            ),
+        )
+    if prepared:
+        return prepared[0]
+    return " ".join(str(source).split()).strip()
 
 
 def _google_translate_text(text: str, source: str, target: str) -> str:
@@ -393,6 +487,99 @@ def _decode_hypothesis(tokenizer: object, tokens: list[str], prefix: str) -> str
     return tokenizer.decode(token_ids, skip_special_tokens=True).strip()
 
 
+def _retry_offline_sentence(
+    translator: object,
+    tokenizer: object,
+    source_text: str,
+    source: str,
+    target: str,
+    target_token: str,
+) -> str:
+    """Retry one difficult sentence directly, then through English, without network."""
+    def translate_candidates(
+        text: str,
+        input_language: str,
+        output_token: str,
+        hypothesis_count: int,
+    ) -> list[str]:
+        tokenizer.src_lang = input_language
+        encoded = tokenizer.convert_ids_to_tokens(tokenizer.encode(text))
+        result = translator.translate_batch(
+            [encoded],
+            target_prefix=[[output_token]],
+            beam_size=max(8, hypothesis_count),
+            num_hypotheses=hypothesis_count,
+            patience=1.5,
+            max_decoding_length=192,
+            repetition_penalty=1.06,
+            no_repeat_ngram_size=3,
+            disable_unk=True,
+        )[0]
+        return [
+            _decode_hypothesis(tokenizer, hypothesis, output_token)
+            for hypothesis in result.hypotheses
+        ]
+
+    def back_translate(candidates: list[str]) -> list[str]:
+        if not candidates:
+            return []
+        tokenizer.src_lang = target
+        encoded = [
+            tokenizer.convert_ids_to_tokens(tokenizer.encode(value))
+            for value in candidates
+        ]
+        source_token = tokenizer.lang_code_to_token[source]
+        results = translator.translate_batch(
+            encoded,
+            target_prefix=[[source_token]] * len(encoded),
+            beam_size=5,
+            max_decoding_length=192,
+            repetition_penalty=1.04,
+            no_repeat_ngram_size=3,
+            disable_unk=True,
+        )
+        return [
+            _decode_hypothesis(tokenizer, result.hypotheses[0], source_token)
+            for result in results
+        ]
+
+    try:
+        direct = translate_candidates(source_text, source, target_token, 6)
+        selected = _select_valid_target_candidate(
+            source_text, direct, back_translate(direct), target
+        )
+        if selected:
+            return selected
+
+        # M2M100 sometimes keeps one Hindi phrase in Devanagari when translating
+        # directly to Bengali. English is used only as a local semantic bridge.
+        if source != "en" and target != "en":
+            english_token = tokenizer.lang_code_to_token.get("en")
+            if english_token:
+                middle_candidates = translate_candidates(
+                    source_text, source, english_token, 3
+                )
+                for middle in middle_candidates:
+                    if not _valid_target_script(source_text, middle, "en"):
+                        continue
+                    target_candidates = translate_candidates(
+                        middle, "en", target_token, 5
+                    )
+                    selected = _select_valid_target_candidate(
+                        source_text,
+                        target_candidates,
+                        back_translate(target_candidates),
+                        target,
+                    )
+                    if selected:
+                        return selected
+    except Exception:
+        return ""
+    finally:
+        tokenizer.src_lang = source
+    return ""
+
+
 def translate_segments(
     segments: list[SubtitleSegment],
     target_language: str,
@@ -505,18 +692,32 @@ def translate_segments(
             back_index = 0
             for local_index, candidates in enumerate(candidate_rows):
                 candidate_backs = back_texts[back_index : back_index + len(candidates)]
-                chosen = _select_semantic_candidate(
-                    batch[local_index], candidates, candidate_backs
+                source_text = batch[local_index]
+                output = _select_valid_target_candidate(
+                    source_text, candidates, candidate_backs, target
                 )
-                output = _preserve_greeting(batch[local_index], chosen, target)
-                output = _normalize_target_fluency(output, target)
-                if not _valid_target_script(batch[local_index], output, target):
-                    raise TranslationError(
-                        "Offline Translation-এর একটি বাক্য সঠিক ভাষায় তৈরি হয়নি।"
+                if not output:
+                    if progress:
+                        absolute_index = start + local_index + 1
+                        progress(
+                            min(0.98, absolute_index / max(1, len(source_texts))),
+                            f"কঠিন বাক্যটি আবার অনুবাদ হচ্ছে—{absolute_index}/{len(source_texts)}",
+                        )
+                    output = _retry_offline_sentence(
+                        translator,
+                        tokenizer,
+                        source_text,
+                        source,
+                        target,
+                        target_token,
                     )
-                translated.append(
-                    _title_case_latin_words(output) if target == "en" else output
-                )
+                if not output:
+                    # A name, acronym or unusually mixed phrase must not cancel a
+                    # complete video. Keep the strongest target candidate audible.
+                    output = _best_effort_target_candidate(
+                        source_text, candidates, target
+                    )
+                translated.append(output)
                 back_index += len(candidates)
             if progress:
                 completed = min(len(source_texts), start + len(batch))
@@ -531,10 +732,14 @@ def translate_segments(
             "Offline Translation সম্পন্ন হয়নি। অন্য ভারী Software বন্ধ করে আবার চেষ্টা করুন।"
         ) from exc
 
-    if translated and all(_comparison_text(value) == _comparison_text(source_texts[index]) for index, value in enumerate(translated)):
-        raise TranslationError(
-            "নির্বাচিত ভাষায় অর্থপূর্ণ Translation তৈরি হয়নি। আবার চেষ্টা করুন।"
-        )
+    if translated and all(
+        _comparison_text(value) == _comparison_text(source_texts[index])
+        for index, value in enumerate(translated)
+    ):
+        # A clip containing only names, acronyms or non-verbal labels may not
+        # need lexical translation. Keep it audible instead of failing the job.
+        if progress:
+            progress(0.99, "শুধু নাম/একই উচ্চারণ পাওয়া গেছে—মূল উচ্চারণ রাখা হচ্ছে…")
 
     return [
         SubtitleSegment(item.start, item.end, translated[index] or item.text, item.text)

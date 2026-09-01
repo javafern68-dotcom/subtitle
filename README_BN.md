@@ -1,6 +1,14 @@
-# Bangla Subtitle Studio V3.2.1 — Natural Synced Dubbing
+# Bangla Subtitle Studio V3.2.2 — Resilient Offline Translation
 
-## V3.2.1-এ স্বাভাবিক বাংলা ব্যাকরণ
+## V3.2.2-এ একটি বাক্যের জন্য পুরো ভিডিও আর বন্ধ হবে না
+
+- একটি offline অনুবাদ ভুল অক্ষরে হলে পাশের সঠিক বিকল্পটি নেওয়া হবে।
+- প্রয়োজন হলে শুধু সেই বাক্যটি আবার অনুবাদ হবে।
+- তারপরও সমস্যা হলে internet ছাড়া English-মাধ্যমে দ্বিতীয় চেষ্টা হবে।
+- OpenAI/YouTube/ব্যক্তির নামের মতো Roman নাম থাকলেও সঠিক বাংলা বাক্য বাতিল হবে না।
+- কঠিন একটি নাম বা বাক্যের জন্য সম্পূর্ণ Voice Translate বন্ধ বা নীরব হবে না।
+
+## V3.2.2-এ স্বাভাবিক বাংলা ব্যাকরণ
 
 - Offline fallback-এর `আপনি কিভাবে? আমি ঠিক আছে।` এখন voice তৈরির আগে `আপনি কেমন আছেন? আমি ঠিক আছি।` হবে।
 
@@ -76,12 +84,12 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.exe` download করুন।  
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe` download করুন।  
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V3.2.1 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V3.2.2 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Voice Translate করার নিয়ম
 

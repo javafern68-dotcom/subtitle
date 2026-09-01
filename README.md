@@ -1,6 +1,13 @@
-# Bangla Subtitle Studio V3.2.1 Natural Synced Dubbing
+# Bangla Subtitle Studio V3.2.2 Resilient Offline Translation
 
-## V3.2.1 natural Bengali and timing fix
+## V3.2.2 resilient offline sentence recovery
+
+- Does not cancel an entire video because one offline sentence candidate uses the wrong alphabet.
+- Tries another meaning-preserving candidate, retries the sentence, then uses an offline English bridge.
+- Accepts Roman person/brand names inside a real Bengali sentence.
+- Keeps a difficult final phrase audible instead of leaving a silent gap.
+
+## V3.2.2 natural Bengali and timing fix
 
 - Common literal Hindi fallback such as `আপনি কিভাবে? আমি ঠিক আছে।` is normalized to natural spoken Bengali: `আপনি কেমন আছেন? আমি ঠিক আছি।`.
 
@@ -80,7 +87,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.1.exe` from the `v3.2.1` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Natural_Synced_Dubbing_Setup_V3.2.2.exe` from the `v3.2.2` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 
