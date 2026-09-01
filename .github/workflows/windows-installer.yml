@@ -93,6 +93,26 @@ jobs:
           $actualVadHash = (Get-FileHash $vadModel -Algorithm SHA256).Hash.ToLower()
           if ($actualVadHash -ne $expectedVadHash) { throw "VAD model checksum mismatch: $actualVadHash" }
 
+      - name: Download verified Offline Organic Bengali Voice model
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $organicDir = "models\organic-vits-rasa-13"
+          New-Item -ItemType Directory -Force -Path $organicDir | Out-Null
+          $organicModel = "$organicDir\vits_tts_q8.mnn"
+          $organicVocab = "$organicDir\vocab.json"
+          curl.exe -L --fail --retry 3 --retry-delay 5 `
+            "https://huggingface.co/developerabu/vits-tts-mnn/resolve/051ce198c14a875396669343427258ef40639f5b/vits_tts_q8.mnn?download=true" `
+            -o $organicModel
+          curl.exe -L --fail --retry 3 --retry-delay 5 `
+            "https://huggingface.co/developerabu/vits-tts-mnn/resolve/051ce198c14a875396669343427258ef40639f5b/vocab.json?download=true" `
+            -o $organicVocab
+          $expectedOrganicHash = "6ec50252ed4ba056426ca2f0156a94528bdb78e8ea28b9df0c9c96096b522995"
+          $actualOrganicHash = (Get-FileHash $organicModel -Algorithm SHA256).Hash.ToLower()
+          if ($actualOrganicHash -ne $expectedOrganicHash) { throw "Organic Voice model checksum mismatch: $actualOrganicHash" }
+          $vocab = Get-Content $organicVocab -Raw -Encoding UTF8 | ConvertFrom-Json
+          if ($null -eq $vocab.'আ' -or $null -eq $vocab.'ম') { throw "Organic Bengali Voice vocabulary is invalid" }
+
       - name: Build Offline 100-language Translation model
         shell: pwsh
         run: |
@@ -120,6 +140,7 @@ jobs:
             --collect-all avro `
             --collect-all edge_tts `
             --collect-all gtts `
+            --collect-all MNN `
             --collect-all ctranslate2 `
             --collect-all sentencepiece `
             --collect-data transformers `
@@ -128,6 +149,8 @@ jobs:
             --copy-metadata gTTS `
             --hidden-import "transformers.models.m2m_100" `
             --hidden-import "transformers.models.m2m_100.tokenization_m2m_100" `
+            --hidden-import "MNN.expr" `
+            --hidden-import "MNN.nn" `
             --add-binary "tools\ffmpeg.exe;tools" `
             --add-binary "tools\ffprobe.exe;tools" `
             --add-binary "tools\ffplay.exe;tools" `
@@ -146,6 +169,7 @@ jobs:
           Copy-Item "models\ggml-large-v3-turbo-q5_0.bin" "$app\models\ggml-large-v3-turbo-q5_0.bin"
           Copy-Item "models\ggml-silero-v6.2.0.bin" "$app\models\ggml-silero-v6.2.0.bin"
           Copy-Item "models\m2m100-418M-int8" "$app\models\m2m100-418M-int8" -Recurse -Force
+          Copy-Item "models\organic-vits-rasa-13" "$app\models\organic-vits-rasa-13" -Recurse -Force
           Copy-Item "THIRD_PARTY_NOTICES.txt" "$app\licenses\THIRD_PARTY_NOTICES.txt"
           Copy-Item "whisper-src\LICENSE" "$app\licenses\whisper.cpp-LICENSE.txt"
 
@@ -161,6 +185,8 @@ jobs:
           if (!(Test-Path "$app\models\ggml-large-v3-turbo-q5_0.bin")) { throw "Accurate Multilingual Voice model missing" }
           if (!(Test-Path "$app\models\ggml-silero-v6.2.0.bin")) { throw "Voice Activity Detection model missing" }
           if (!(Test-Path "$app\models\m2m100-418M-int8\model.bin")) { throw "Offline Translation model missing" }
+          if (!(Test-Path "$app\models\organic-vits-rasa-13\vits_tts_q8.mnn")) { throw "Offline Organic Voice model missing" }
+          if (!(Test-Path "$app\models\organic-vits-rasa-13\vocab.json")) { throw "Offline Organic Voice vocabulary missing" }
           & "$app\tools\whisper\whisper-cli.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "Offline Whisper engine self-test failed" }
           $modelHash = (Get-FileHash "$app\models\ggml-bengali-medium-q4_0.bin" -Algorithm SHA256).Hash.ToLower()
@@ -169,6 +195,8 @@ jobs:
           if ($vadHash -ne "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987") { throw "Bundled VAD model verification failed" }
           $multilingualHash = (Get-FileHash "$app\models\ggml-large-v3-turbo-q5_0.bin" -Algorithm SHA256).Hash.ToLower()
           if ($multilingualHash -ne "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2") { throw "Bundled accurate multilingual model verification failed" }
+          $organicHash = (Get-FileHash "$app\models\organic-vits-rasa-13\vits_tts_q8.mnn" -Algorithm SHA256).Hash.ToLower()
+          if ($organicHash -ne "6ec50252ed4ba056426ca2f0156a94528bdb78e8ea28b9df0c9c96096b522995") { throw "Bundled Organic Voice model verification failed" }
           curl.exe -L --fail --retry 3 --retry-delay 5 `
             "https://huggingface.co/bangla-speech-processing/BanglaASR/resolve/main/mp3/common_voice_bn_31515636.mp3?download=true" `
             -o "bangla-smoke.mp3"
@@ -188,6 +216,12 @@ jobs:
           if ($fallbackTest.ExitCode -ne 0) { throw "Packaged controlled Bengali Text To Voice self-test failed" }
           if (!(Test-Path "google-bengali-fallback.mp3")) { throw "Google Bengali fallback audio missing" }
           Write-Host "Verified real Bengali Human Emotion Voice with Speed and Pitch controls"
+          $organicTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList @("--organic-voice-self-test", "offline-organic-bengali.mp3") -Wait -PassThru
+          if ($organicTest.ExitCode -ne 0) { throw "Packaged Offline Organic Bengali Voice self-test failed" }
+          if (!(Test-Path "offline-organic-bengali.mp3") -or (Get-Item "offline-organic-bengali.mp3").Length -lt 5000) { throw "Offline Organic Bengali Voice MP3 missing" }
+          $organicDuration = & "$app\_internal\tools\ffprobe.exe" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "offline-organic-bengali.mp3"
+          if ([double]$organicDuration -lt 1.0) { throw "Offline Organic Bengali Voice is empty" }
+          Write-Host "Verified Offline Organic Bengali female storytelling voice: $organicDuration seconds"
           $env:PYTHONUTF8 = "1"
           @'
           from bangla_subtitle_studio.voice_translate import _online_voice, _save_speech
@@ -216,12 +250,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -229,30 +263,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v3.4.0"
+          $tag = "v3.5.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe" `
-              "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe" `
+              "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V3.4.0 Human Emotion Voice" `
-              --notes "Adds Human Emotion Text To Voice presets: Natural, Happy, Loving, Angry, Sad, Serious and Storytelling, plus Emotion Strength, natural breathing pauses and a short Voice Preview. Microsoft Natural Voice quality is shown clearly; if the basic Google fallback is used, the app warns that it can sound robotic. Manual Speed and Pitch controls, clean Roman-only Avro, multilingual subtitle and Voice Translate features remain intact. No API key or per-voice charge; natural voice needs internet. Installs over earlier versions without uninstalling."
+              --title "Bangla Subtitle Studio V3.5.0 Offline Organic CPU Voice" `
+              --notes "Adds a bundled Offline Organic Bengali AI Voice engine with female and male voices and native Conversation, Happy, Angry, Sad, News and Story/Book styles. It runs on CPU for 16 GB RAM computers with low-VRAM GPUs, so it is slower but needs no internet, API key or per-voice payment. A Voice Engine selector keeps the fast Microsoft Natural Online voices for English, Hindi, Arabic, Urdu and Bengali. Speed, Pitch, Emotion Strength, natural pauses, preview, subtitles, clean Avro and Voice Translate remain intact. The packaged installer verifies a real Bengali storytelling MP3 before release and installs over earlier versions."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe" `
-              "installer\Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe" `
+              "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Human-Emotion-Voice-Setup-V3.4.0
+          name: Bangla-Subtitle-Studio-Organic-CPU-Voice-Setup-V3.5.0
           path: |
-            installer/Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe
-            installer/Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.sha256.txt
+            installer/Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe
+            installer/Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

@@ -1,4 +1,22 @@
-# Bangla Subtitle Studio V3.4.0 — Human Emotion Text To Voice
+# Bangla Subtitle Studio V3.5.0 — Offline Organic CPU Voice
+
+## V3.5.0-এর Organic বাংলা AI Voice
+
+- Installer-এর মধ্যে Offline Organic বাংলা AI model থাকবে; আলাদা download, API key বা টাকা লাগবে না।
+- বাংলা নারী ও পুরুষ কণ্ঠ নির্বাচন করা যাবে।
+- `Conversation`, `Happy`, `Angry`, `Sad`, `News` ও `Story/Book` model-এর নিজের Emotion style হিসেবে তৈরি হবে—শুধু কৃত্রিম Pitch পরিবর্তন নয়।
+- আপনার ১৬GB RAM ব্যবহার করে CPU-তে চলবে; ২GB GPU-এর ওপর নির্ভর করবে না। তাই কিছুটা ধীর হলেও কম্পিউটারে চলার উপযোগী।
+- `Voice Engine` থেকে `Organic CPU Offline` অথবা আগের দ্রুত `Microsoft Natural Online` নির্বাচন করা যাবে।
+- English, Hindi, Arabic, Urdu এবং দ্রুত বাংলা voice-এর জন্য Online mode আগের মতোই থাকবে।
+- Release দেওয়ার আগে install করা EXE দিয়ে আসল বাংলা Storytelling MP3 তৈরি করে পরীক্ষা পাস করানো হয়।
+
+### Organic বাংলা voice তৈরির নিয়ম
+
+১. `Text To Voice` tab খুলুন।
+২. `Voice Engine` থেকে `Organic CPU Offline` রাখুন।
+৩. বাংলা script লিখে নারী/পুরুষ কণ্ঠ ও Emotion নির্বাচন করুন।
+৪. প্রথমে `Voice Preview` শুনুন; তারপর `Text থেকে Voice তৈরি করুন` চাপুন।
+৫. প্রথমবার model load হতে একটু সময় দিন—Internet চালু রাখার প্রয়োজন নেই।
 
 ## V3.4.0-এর মানবসদৃশ Emotion Voice
 
@@ -112,12 +130,12 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe` download করুন।
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe` download করুন।
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V3.4.0 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V3.5.0 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Voice Translate করার নিয়ম
 

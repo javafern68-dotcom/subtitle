@@ -201,6 +201,24 @@ def voice_fallback_self_test(output_audio: str) -> None:
         raise RuntimeError(f"Text To Voice engine status is invalid: {engine}")
 
 
+def organic_voice_self_test(output_audio: str) -> None:
+    engine = create_text_voice(
+        "আসসালামু আলাইকুম। আপনারা সবাই কেমন আছেন? আজ আমরা একটি সুন্দর গল্প শুনবো।",
+        "bn",
+        "organic:bn:female",
+        output_audio,
+        emotion="storytelling",
+        emotion_strength=80,
+        natural_pauses=True,
+        engine_mode="organic",
+    )
+    output = Path(output_audio)
+    if not output.is_file() or output.stat().st_size < 5_000:
+        raise RuntimeError("Offline Organic Bengali Voice MP3 was not created")
+    if engine != "organic":
+        raise RuntimeError(f"Organic engine status is invalid: {engine}")
+
+
 if __name__ == "__main__":
     if "--srt-self-test" in sys.argv:
         try:
@@ -227,6 +245,13 @@ if __name__ == "__main__":
             option_index = sys.argv.index("--voice-fallback-self-test")
             voice_fallback_self_test(sys.argv[option_index + 1])
         except Exception:
+            sys.exit(1)
+    elif "--organic-voice-self-test" in sys.argv:
+        try:
+            option_index = sys.argv.index("--organic-voice-self-test")
+            organic_voice_self_test(sys.argv[option_index + 1])
+        except Exception:
+            traceback.print_exc()
             sys.exit(1)
     else:
         main()

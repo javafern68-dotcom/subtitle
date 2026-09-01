@@ -5,3 +5,4 @@ sentencepiece>=0.2,<0.3
 transformers>=4.45,<5
 edge-tts>=7.2.8,<8
 gTTS>=2.5.4,<3
+MNN==3.6.1

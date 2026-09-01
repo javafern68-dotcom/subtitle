@@ -22,14 +22,16 @@ from .transcription import transcribe_video
 from .translation import shift_segments, shift_segments_earlier, translate_segments
 from .voice_translate import (
     TEXT_VOICE_EMOTION_OPTIONS,
+    TEXT_VOICE_ENGINE_OPTIONS,
     TEXT_VOICE_OPTIONS,
+    ORGANIC_VOICE_OPTIONS,
     create_text_voice,
     create_voice_translated_video,
 )
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "3.4.0"
+APP_VERSION = "3.5.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -176,16 +178,19 @@ class BanglaSubtitleStudio(tk.Tk):
         self.voice_original_volume_var = tk.DoubleVar(value=0.0)
         self.voice_add_subtitles_var = tk.BooleanVar(value=True)
         self.voice_output_var = tk.StringVar(value="")
-        self.text_voice_language_var = tk.StringVar(value="English")
-        self.text_voice_id_var = tk.StringVar(value="en-US-JennyNeural — নারী কণ্ঠ • US")
+        self.text_voice_mode_var = tk.StringVar(value=next(iter(TEXT_VOICE_ENGINE_OPTIONS)))
+        self.text_voice_language_var = tk.StringVar(value="বাংলা")
+        self.text_voice_id_var = tk.StringVar(
+            value="organic:bn:female — Organic বাংলা নারী কণ্ঠ • Offline CPU"
+        )
         self.text_voice_rate_var = tk.DoubleVar(value=0)
         self.text_voice_pitch_var = tk.DoubleVar(value=0)
         self.text_voice_emotion_var = tk.StringVar(value="স্বাভাবিক (Natural)")
         self.text_voice_emotion_strength_var = tk.DoubleVar(value=65)
         self.text_voice_natural_pauses_var = tk.BooleanVar(value=True)
         self.text_voice_allow_basic_fallback_var = tk.BooleanVar(value=False)
-        self.text_voice_engine_var = tk.StringVar(
-            value="Voice engine: Microsoft Natural Voice প্রস্তুত"
+        self.text_voice_engine_status_var = tk.StringVar(
+            value="✓ Voice engine: Offline Organic বাংলা AI প্রস্তুত"
         )
         self.text_voice_output_var = tk.StringVar(value="")
         self.subtitle_lead_var = tk.DoubleVar(value=0.35)
@@ -304,7 +309,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             generator,
-            text="AI Model: V3.4 Human Emotion Voice + Clean Avro + Meaning-Checked Translation",
+            text="AI Model: V3.5 Offline Organic CPU Voice + Clean Avro + Meaning-Checked Translation",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(0, 10))
@@ -494,7 +499,18 @@ class BanglaSubtitleStudio(tk.Tk):
         )
         self.text_voice_text.pack(fill="both", expand=True)
 
-        voice_card = self._section(parent, "ভাষা, Voice ID ও কণ্ঠ নিয়ন্ত্রণ")
+        voice_card = self._section(parent, "Engine, ভাষা, Voice ID ও কণ্ঠ নিয়ন্ত্রণ")
+        ttk.Label(voice_card, text="Voice Engine", style="CardTitle.TLabel").pack(anchor="w")
+        engine_combo = ttk.Combobox(
+            voice_card,
+            textvariable=self.text_voice_mode_var,
+            values=list(TEXT_VOICE_ENGINE_OPTIONS),
+            state="readonly",
+        )
+        engine_combo.pack(fill="x", pady=(3, 9))
+        engine_combo.bind(
+            "<<ComboboxSelected>>", lambda _event: self._refresh_text_voice_engine()
+        )
         ttk.Label(voice_card, text="Script-এর ভাষা", style="CardTitle.TLabel").pack(anchor="w")
         language_combo = ttk.Combobox(
             voice_card,
@@ -504,7 +520,7 @@ class BanglaSubtitleStudio(tk.Tk):
         )
         language_combo.pack(fill="x", pady=(3, 9))
         language_combo.bind(
-            "<<ComboboxSelected>>", lambda _event: self._refresh_text_voice_ids()
+            "<<ComboboxSelected>>", lambda _event: self._on_text_voice_language_changed()
         )
         ttk.Label(voice_card, text="Voice ID", style="CardTitle.TLabel").pack(anchor="w")
         self.text_voice_id_combo = ttk.Combobox(
@@ -565,7 +581,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(fill="x", pady=(9, 0))
         ttk.Label(
             voice_card,
-            textvariable=self.text_voice_engine_var,
+            textvariable=self.text_voice_engine_status_var,
             foreground="#65E6A3",
             background="#1B2940",
             font=("Nirmala UI", 9, "bold"),
@@ -573,7 +589,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(10, 0))
         ttk.Label(
             voice_card,
-            text="Free voice-এ Emotion, Speed, Pitch, Volume ও বিরতি মিলিয়ে মানুষের মতো বলার চেষ্টা করা হবে। Internet লাগবে; API key বা প্রতি voice-এর টাকা লাগবে না।",
+            text="Organic CPU mode-এ বাংলা voice সম্পূর্ণ Offline ও আসল AI Emotion style-এ তৈরি হবে—একটু ধীর হতে পারে। অন্য ভাষায় Microsoft Natural Online ব্যবহার করুন। কোনো API key বা প্রতি voice-এর টাকা লাগবে না।",
             foreground="#65E6A3",
             background="#1B2940",
             font=("Nirmala UI", 9),
@@ -636,13 +652,51 @@ class BanglaSubtitleStudio(tk.Tk):
         language = TEXT_VOICE_LANGUAGES.get(
             self.text_voice_language_var.get(), "en"
         )
+        mode = TEXT_VOICE_ENGINE_OPTIONS.get(
+            self.text_voice_mode_var.get(), "online"
+        )
+        options = ORGANIC_VOICE_OPTIONS if mode == "organic" else TEXT_VOICE_OPTIONS
         values = [
             f"{voice_id} — {description}"
-            for voice_id, description in TEXT_VOICE_OPTIONS.get(language, [])
+            for voice_id, description in options.get(language, [])
         ]
         self.text_voice_id_combo.configure(values=values)
         if self.text_voice_id_var.get() not in values:
             self.text_voice_id_var.set(values[0] if values else "")
+
+    def _refresh_text_voice_engine(self) -> None:
+        mode = TEXT_VOICE_ENGINE_OPTIONS.get(
+            self.text_voice_mode_var.get(), "online"
+        )
+        if mode == "organic":
+            self.text_voice_language_var.set("বাংলা")
+            self.text_voice_engine_status_var.set(
+                "✓ Offline Organic বাংলা AI • CPU-তে ধীরে কিন্তু উন্নত কণ্ঠ"
+            )
+        else:
+            self.text_voice_engine_status_var.set(
+                "Voice engine: Microsoft Natural Online প্রস্তুত"
+            )
+        self._refresh_text_voice_ids()
+
+    def _on_text_voice_language_changed(self) -> None:
+        language = TEXT_VOICE_LANGUAGES.get(
+            self.text_voice_language_var.get(), "en"
+        )
+        mode = TEXT_VOICE_ENGINE_OPTIONS.get(
+            self.text_voice_mode_var.get(), "online"
+        )
+        if mode == "organic" and language != "bn":
+            online_label = next(
+                label
+                for label, value in TEXT_VOICE_ENGINE_OPTIONS.items()
+                if value == "online"
+            )
+            self.text_voice_mode_var.set(online_label)
+            self.text_voice_engine_status_var.set(
+                "Voice engine: অন্য ভাষার জন্য Microsoft Natural Online নির্বাচন হয়েছে"
+            )
+        self._refresh_text_voice_ids()
 
     def _reset_text_voice_controls(self) -> None:
         self.text_voice_rate_var.set(0)
@@ -1470,7 +1524,10 @@ class BanglaSubtitleStudio(tk.Tk):
 
     def _selected_text_voice_settings(
         self,
-    ) -> tuple[str, str, int, int, str, int, bool, bool]:
+    ) -> tuple[str, str, str, int, int, str, int, bool, bool]:
+        engine_mode = TEXT_VOICE_ENGINE_OPTIONS.get(
+            self.text_voice_mode_var.get(), "online"
+        )
         language = TEXT_VOICE_LANGUAGES.get(
             self.text_voice_language_var.get(), "en"
         )
@@ -1480,6 +1537,7 @@ class BanglaSubtitleStudio(tk.Tk):
             self.text_voice_emotion_var.get(), "natural"
         )
         return (
+            engine_mode,
             language,
             voice_id,
             int(round(self.text_voice_rate_var.get())),
@@ -1506,16 +1564,20 @@ class BanglaSubtitleStudio(tk.Tk):
         return cleaned[: max(1, cut + 1)].strip()
 
     def _set_text_voice_engine_status(self, engine: str) -> None:
-        if engine == "microsoft":
-            self.text_voice_engine_var.set(
+        if engine == "organic":
+            self.text_voice_engine_status_var.set(
+                "✓ Voice engine: Offline Organic বাংলা AI (উন্নত মান)"
+            )
+        elif engine == "microsoft":
+            self.text_voice_engine_status_var.set(
                 "✓ Voice engine: Microsoft Natural Voice (উন্নত মান)"
             )
         elif engine == "mixed":
-            self.text_voice_engine_var.set(
+            self.text_voice_engine_status_var.set(
                 "⚠ Voice engine: কিছু অংশ Google Basic fallback"
             )
         else:
-            self.text_voice_engine_var.set(
+            self.text_voice_engine_status_var.set(
                 "⚠ Voice engine: Google Basic fallback—কণ্ঠ রোবটের মতো হতে পারে"
             )
 
@@ -1542,6 +1604,7 @@ class BanglaSubtitleStudio(tk.Tk):
             )
             return
         (
+            engine_mode,
             language,
             voice_id,
             rate,
@@ -1578,6 +1641,7 @@ class BanglaSubtitleStudio(tk.Tk):
                     allow_basic_fallback=allow_basic_fallback,
                     progress=progress,
                     cancel_event=self.busy_cancel,
+                    engine_mode=engine_mode,
                 )
                 self.after(
                     0,
@@ -1642,6 +1706,7 @@ class BanglaSubtitleStudio(tk.Tk):
             )
             return
         (
+            engine_mode,
             language,
             voice_id,
             rate,
@@ -1687,6 +1752,7 @@ class BanglaSubtitleStudio(tk.Tk):
                     allow_basic_fallback=allow_basic_fallback,
                     progress=progress,
                     cancel_event=self.busy_cancel,
+                    engine_mode=engine_mode,
                 )
                 self.after(
                     0,
@@ -1715,13 +1781,17 @@ class BanglaSubtitleStudio(tk.Tk):
         self._set_text_voice_engine_status(engine)
         self.progress_var.set(100)
         fallback_note = ""
-        if engine != "microsoft":
+        if engine in {"google", "mixed"}:
             fallback_note = (
                 "\n\nসতর্কতা: Microsoft Natural Voice পাওয়া যায়নি, তাই Google Basic "
                 "fallback ব্যবহৃত হয়েছে। কণ্ঠ রোবটের মতো শোনালে Internet/VPN/Firewall "
                 "ঠিক করে আবার Preview শুনুন।"
             )
-        self.status_var.set("Human Emotion Text To Voice MP3 তৈরি হয়েছে।")
+        self.status_var.set(
+            "Offline Organic বাংলা Voice MP3 তৈরি হয়েছে।"
+            if engine == "organic"
+            else "Human Emotion Text To Voice MP3 তৈরি হয়েছে।"
+        )
         if messagebox.askyesno(
             "Text To Voice সম্পন্ন",
             f"Voice তৈরি হয়েছে:\n{output}{fallback_note}\n\nFolder খুলবেন?",

@@ -12,6 +12,11 @@ from typing import Callable
 
 from .media import _startupinfo, bundled_tool
 from .models import SubtitleSegment
+from .organic_tts import (
+    ORGANIC_VOICE_OPTIONS,
+    OrganicVoiceError,
+    create_organic_text_voice,
+)
 from .transcription import transcribe_video
 from .translation import translate_voice_segments
 
@@ -59,6 +64,10 @@ TEXT_VOICE_OPTIONS = {
         ("ur-PK-UzmaNeural", "নারী কণ্ঠ"),
         ("ur-PK-AsadNeural", "পুরুষ কণ্ঠ"),
     ],
+}
+TEXT_VOICE_ENGINE_OPTIONS = {
+    "Organic CPU Offline (বাংলা • ধীরে • উন্নত)": "organic",
+    "Microsoft Natural Online (সব ভাষা • দ্রুত)": "online",
 }
 TEXT_VOICE_EMOTION_OPTIONS = {
     "স্বাভাবিক (Natural)": "natural",
@@ -387,8 +396,9 @@ def create_text_voice(
     allow_basic_fallback: bool = False,
     progress: VoiceProgress | None = None,
     cancel_event: threading.Event | None = None,
+    engine_mode: str = "online",
 ) -> str:
-    """Create an MP3 voice and return microsoft, google or mixed engine status."""
+    """Create an MP3 voice and return organic, microsoft, google or mixed."""
     script = str(text).strip()
     lang = language.strip().lower()
     voice = voice_id.strip()
@@ -396,6 +406,26 @@ def create_text_voice(
         raise VoiceTranslationError("প্রথমে Text To Voice ঘরে লেখা দিন।")
     if len(script) > 100_000:
         raise VoiceTranslationError("একবারে সর্বোচ্চ ১,০০,০০০ অক্ষরের script দিন।")
+    mode = str(engine_mode).strip().lower() or "online"
+    if mode == "organic":
+        try:
+            return create_organic_text_voice(
+                text=script,
+                language=lang,
+                voice_id=voice,
+                output_path=output_path,
+                rate_percent=rate_percent,
+                pitch_hz=pitch_hz,
+                emotion=emotion,
+                emotion_strength=emotion_strength,
+                natural_pauses=natural_pauses,
+                progress=progress,
+                cancel_event=cancel_event,
+            )
+        except OrganicVoiceError as exc:
+            raise VoiceTranslationError(str(exc)) from exc
+    if mode != "online":
+        raise VoiceTranslationError("Text To Voice engine নির্বাচন সঠিক নয়।")
     if lang not in TEXT_VOICE_OPTIONS:
         raise VoiceTranslationError("নির্বাচিত Text To Voice ভাষাটি সমর্থিত নয়।")
     allowed_voices = {item[0] for item in TEXT_VOICE_OPTIONS[lang]}

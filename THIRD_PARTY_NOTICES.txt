@@ -54,6 +54,21 @@ for higher-accuracy, faster cross-language translation. No API key is requested
 by this software. If that online request is unavailable or returns text in the
 wrong writing system, the bundled Offline M2M100 model is used automatically.
 
+AI4Bharat VITS Rasa 13 Organic Voice model
+Original model: https://huggingface.co/ai4bharat/vits_rasa_13
+MNN INT8 conversion: https://huggingface.co/developerabu/vits-tts-mnn
+Model authors/attribution: AI4Bharat Team and Ashwin Sankar
+Bundled file: vits_tts_q8.mnn
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License link: https://creativecommons.org/licenses/by/4.0/
+The Text To Voice Organic CPU mode uses Bengali female/male speaker IDs and the
+model's native conversation, happy, angry, sad, news and book/story style IDs.
+
+MNN on-device inference runtime
+Copyright (c) Alibaba Group Holding Limited
+Source: https://github.com/alibaba/MNN
+License: BSD-3-Clause
+
 
 FFmpeg
 Source: https://ffmpeg.org/

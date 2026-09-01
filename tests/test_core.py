@@ -29,8 +29,16 @@ from bangla_subtitle_studio.transcription import (
     build_whisper_command,
     transcribe_audio_file,
 )
+from bangla_subtitle_studio.organic_tts import (
+    ORGANIC_VOICE_OPTIONS,
+    normalize_organic_text,
+    organic_voice_settings,
+    split_organic_text,
+    tokenize_organic_text,
+)
 from bangla_subtitle_studio.voice_translate import (
     TEXT_VOICE_EMOTION_OPTIONS,
+    TEXT_VOICE_ENGINE_OPTIONS,
     TEXT_VOICE_OPTIONS,
     VOICE_SAMPLE_RATE,
     _atempo_expression,
@@ -496,10 +504,60 @@ class UIRegressionTests(unittest.TestCase):
         self.assertIn("১০ সেকেন্ড Voice Preview", source)
         self.assertIn("Google Basic fallback—কণ্ঠ রোবটের মতো হতে পারে", source)
         self.assertIn("রোবটিক Google Basic voice ব্যবহার করতে দিন", source)
+        self.assertIn("Offline Organic বাংলা AI", source)
         self.assertIn("create_text_voice", source)
 
 
 class VoiceTranslationTests(unittest.TestCase):
+    def test_organic_cpu_voice_has_bengali_female_and_male(self) -> None:
+        self.assertEqual(
+            TEXT_VOICE_ENGINE_OPTIONS["Organic CPU Offline (বাংলা • ধীরে • উন্নত)"],
+            "organic",
+        )
+        self.assertEqual(
+            {voice_id for voice_id, _label in ORGANIC_VOICE_OPTIONS["bn"]},
+            {"organic:bn:female", "organic:bn:male"},
+        )
+
+    def test_organic_tokenizer_keeps_bengali_and_intersperses_blanks(self) -> None:
+        vocab = {" ": 16, "আ": 281, "ম": 316, "ি": 327, "।": 248}
+        self.assertEqual(normalize_organic_text("আমি 🙂।", vocab), "আমি ।")
+        tokenized = tokenize_organic_text("আমি।", vocab)
+        self.assertEqual(tokenized.shape, (1, 9))
+        self.assertEqual(tokenized[0, 0], 0)
+        self.assertEqual(tokenized[0, 1], 281)
+
+    def test_organic_style_uses_native_emotion_and_safe_pause(self) -> None:
+        self.assertEqual(
+            organic_voice_settings("bn", "organic:bn:female", "happy", 80),
+            (2, 8, 96),
+        )
+        self.assertEqual(
+            organic_voice_settings("bn", "organic:bn:male", "angry", 0),
+            (3, 4, 120),
+        )
+
+    def test_organic_long_text_splits_into_cpu_safe_sentences(self) -> None:
+        chunks = split_organic_text(("এটি একটি পরিষ্কার বাংলা বাক্য। " * 30), max_chars=100)
+        self.assertGreater(len(chunks), 5)
+        self.assertTrue(all(len(chunk) <= 100 for chunk in chunks))
+
+    @mock.patch(
+        "bangla_subtitle_studio.voice_translate.create_organic_text_voice",
+        return_value="organic",
+    )
+    def test_text_voice_routes_to_offline_organic_engine(self, create: mock.Mock) -> None:
+        engine = create_text_voice(
+            "আপনি কেমন আছেন?",
+            "bn",
+            "organic:bn:female",
+            "organic.mp3",
+            emotion="loving",
+            engine_mode="organic",
+        )
+        self.assertEqual(engine, "organic")
+        create.assert_called_once()
+
     def test_text_voice_has_bengali_and_english_voice_ids(self) -> None:
         self.assertIn(("bn-BD-NabanitaNeural", "নারী কণ্ঠ"), TEXT_VOICE_OPTIONS["bn"])
         self.assertTrue(

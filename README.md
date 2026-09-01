@@ -1,4 +1,14 @@
-# Bangla Subtitle Studio V3.4.0 Human Emotion Text To Voice
+# Bangla Subtitle Studio V3.5.0 Offline Organic CPU Voice
+
+## V3.5.0 organic Bengali AI voice
+
+- A bundled 33.6 MB INT8 VITS model creates Bengali speech fully offline on the CPU.
+- Bengali female and male speaker IDs are available.
+- Uses the model's native Conversation, Happy, Angry, Sad, News and Book/Story styles instead of only changing pitch.
+- Designed for 16 GB RAM computers with low-VRAM GPUs: generation can be slower, but does not depend on the 2 GB GPU.
+- A Voice Engine selector keeps Microsoft Natural Online for fast Bengali, English, Hindi, Arabic and Urdu speech.
+- Organic voice requires no Internet, API key or per-voice payment.
+- The Windows release is blocked unless the packaged EXE creates and validates a real Bengali storytelling MP3.
 
 ## V3.4.0 human emotion voice
 
@@ -105,7 +115,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Human_Emotion_Voice_Setup_V3.4.0.exe` from the `v3.4.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe` from the `v3.5.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 
@@ -118,11 +128,13 @@ The GitHub Actions workflow builds and bundles:
 - verified `ggml-large-v3-turbo-q5_0.bin` multilingual source-speech model
 - verified Silero V6.2 Voice Activity Detection model
 - bundled INT8 M2M100 translation model covering 100 languages
+- bundled INT8 VITS Rasa 13 MNN model for Offline Organic Bengali Text To Voice
 - bundled Avro/Banglish reverse transliteration
 - real Bengali speech test that must produce Bengali Unicode text and a readable timed SRT
 - packaged Bengali greeting-to-Hindi and English semantic translation tests
 - packaged six-direction Bengali/English/Hindi accurate translation test
 - packaged real Google Bengali fallback-audio test
+- packaged real Offline Organic Bengali storytelling-voice test
 - packaged full Hindi-voice-to-Bengali-voice video test using an online natural target voice
 - Inno Setup installer and SHA-256 checksum
 
