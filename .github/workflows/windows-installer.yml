@@ -110,8 +110,8 @@ jobs:
           $expectedOrganicHash = "6ec50252ed4ba056426ca2f0156a94528bdb78e8ea28b9df0c9c96096b522995"
           $actualOrganicHash = (Get-FileHash $organicModel -Algorithm SHA256).Hash.ToLower()
           if ($actualOrganicHash -ne $expectedOrganicHash) { throw "Organic Voice model checksum mismatch: $actualOrganicHash" }
-          $vocab = Get-Content $organicVocab -Raw -Encoding UTF8 | ConvertFrom-Json
-          if ($null -eq $vocab.'আ' -or $null -eq $vocab.'ম') { throw "Organic Bengali Voice vocabulary is invalid" }
+          $vocab = Get-Content $organicVocab -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable
+          if (!$vocab.ContainsKey('আ') -or !$vocab.ContainsKey('ম')) { throw "Organic Bengali Voice vocabulary is invalid" }
 
       - name: Build Offline 100-language Translation model
         shell: pwsh
