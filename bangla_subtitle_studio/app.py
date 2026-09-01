@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import copy
 import subprocess
 import tempfile
 import threading
@@ -18,6 +19,8 @@ from .exporter import ExportError, export_project
 from .media import MediaError, _startupinfo, bundled_tool, extract_frame, probe_video
 from .models import ColorSettings, Project, SubtitleSegment
 from .subtitles import format_srt_time, parse_srt, parse_timecode, write_srt
+from .timeline_exporter import export_timeline_project, render_timeline_frame
+from .timeline_ui import TimelineEditor
 from .transcription import transcribe_video
 from .translation import shift_segments, shift_segments_earlier, translate_segments
 from .voice_translate import (
@@ -31,7 +34,7 @@ from .voice_translate import (
 
 
 APP_NAME = "Bangla Subtitle Studio"
-APP_VERSION = "3.5.0"
+APP_VERSION = "4.0.0"
 PREVIEW_SIZE = (960, 540)
 LANGUAGES = {
     "বাংলা (বাংলা অক্ষর)": "bn",
@@ -120,6 +123,11 @@ class BanglaSubtitleStudio(tk.Tk):
         self.text_voice_preview_path = str(
             Path(tempfile.gettempdir()) / "BanglaSubtitleStudio_voice_preview.mp3"
         )
+        self.timeline_preview_path = str(
+            Path(tempfile.gettempdir()) / "BanglaSubtitleStudio_timeline_preview.mp4"
+        )
+        self.timeline_preview_dirty = True
+        self._playback_duration = 0.0
         self.play_queue: queue.Queue[tuple[Image.Image, float] | None] = queue.Queue(maxsize=2)
         self.logo_drag_offset = (0.0, 0.0)
         self._sync_baseline: list[SubtitleSegment] = []
@@ -229,8 +237,10 @@ class BanglaSubtitleStudio(tk.Tk):
         ttk.Button(top, text="Project Save", command=self.save_project).pack(side="right", padx=4)
         ttk.Button(top, text="ভিডিও দিন", style="Accent.TButton", command=self.open_video).pack(side="right", padx=4)
 
-        main = ttk.Panedwindow(self, orient="horizontal")
-        main.pack(fill="both", expand=True, padx=14, pady=(0, 8))
+        workspace = ttk.Panedwindow(self, orient="vertical")
+        workspace.pack(fill="both", expand=True, padx=14, pady=(0, 8))
+        main = ttk.Panedwindow(workspace, orient="horizontal")
+        workspace.add(main, weight=3)
 
         preview_panel = ttk.Frame(main, style="Panel.TFrame", padding=12)
         controls_panel = ttk.Frame(main, style="Panel.TFrame", padding=4, width=470)
@@ -285,6 +295,16 @@ class BanglaSubtitleStudio(tk.Tk):
         self._build_color_tab(self.color_tab.body)
         self._build_export_tab(self.export_tab.body)
 
+        self.timeline_editor = TimelineEditor(
+            workspace,
+            self.project,
+            on_change=self._timeline_changed,
+            on_seek=self._timeline_seek,
+            on_primary_video=self._timeline_primary_video,
+            on_export=self._show_export_tab,
+        )
+        workspace.add(self.timeline_editor, weight=2)
+
         bottom = ttk.Frame(self, style="Panel.TFrame", padding=(14, 7))
         bottom.pack(fill="x")
         ttk.Label(bottom, textvariable=self.status_var).pack(side="left", fill="x", expand=True)
@@ -309,7 +329,7 @@ class BanglaSubtitleStudio(tk.Tk):
         ).pack(anchor="w", fill="x", pady=(0, 5))
         ttk.Label(
             generator,
-            text="AI Model: V3.5 Offline Organic CPU Voice + Clean Avro + Meaning-Checked Translation",
+            text="V4 Timeline + V3.5 Offline Organic CPU Voice + Clean Avro + Meaning-Checked Translation",
             style="Muted.TLabel",
             wraplength=390,
         ).pack(anchor="w", fill="x", pady=(0, 10))
@@ -865,9 +885,55 @@ class BanglaSubtitleStudio(tk.Tk):
         self._update_time_label()
         self.status_var.set("ভিডিও প্রস্তুত। Offline Generate Subtitle ক্লিক করুন।")
         self.request_preview(0.0)
+        if hasattr(self, "timeline_editor") and not self.project.timeline.has_clips():
+            self.timeline_editor.add_paths([path], auto_place=True)
+
+    def _timeline_primary_video(self, path: str) -> None:
+        try:
+            info = probe_video(path)
+        except MediaError as exc:
+            self.status_var.set(str(exc))
+            return
+        self.project.video_path = path
+        self.project.duration = float(info["duration"])
+        self.project.width = int(info["width"])
+        self.project.height = int(info["height"])
+        self.project.fps = float(info["fps"])
+        self.project.output_path = self.project.default_output_path()
+        self.output_var.set(self.project.output_path)
+        self.seek_scale.configure(to=max(0.1, self._active_duration()))
+        self.video_name_var.set(
+            f"{Path(path).name}  •  {self.project.width}×{self.project.height} • Timeline"
+        )
+        self.current_time = 0.0
+        self.seek_var.set(0.0)
+        self._update_time_label()
+        self.request_preview(0.0)
+
+    def _timeline_changed(self, message: str) -> None:
+        self.timeline_preview_dirty = True
+        self.seek_scale.configure(to=max(0.1, self._active_duration()))
+        self.status_var.set(message)
+        self._update_time_label()
+        self.request_preview(min(self.current_time, self._active_duration()))
+
+    def _timeline_seek(self, seconds: float) -> None:
+        self.stop_playback()
+        self.current_time = max(0.0, min(float(seconds), self._active_duration()))
+        self.seek_var.set(self.current_time)
+        self._update_time_label()
+        self.request_preview(self.current_time)
+
+    def _show_export_tab(self) -> None:
+        self.notebook.select(self.export_tab)
+        self.status_var.set("Output file ঠিক করে Export Video ক্লিক করুন। Timeline-এর সব layer একসঙ্গে তৈরি হবে।")
+
+    def _active_duration(self) -> float:
+        timeline_duration = self.project.timeline.duration()
+        return timeline_duration if self.project.timeline.has_clips() else self.project.duration
 
     def request_preview(self, seconds: float) -> None:
-        if not self.project.video_path:
+        if not self.project.video_path and not self.project.timeline.has_clips():
             return
         self.preview_serial += 1
         serial = self.preview_serial
@@ -875,7 +941,10 @@ class BanglaSubtitleStudio(tk.Tk):
 
         def worker() -> None:
             try:
-                image = extract_frame(self.project.video_path, seconds, *PREVIEW_SIZE)
+                if self.project.timeline.has_clips():
+                    image = render_timeline_frame(self.project, seconds, *PREVIEW_SIZE)
+                else:
+                    image = extract_frame(self.project.video_path, seconds, *PREVIEW_SIZE)
                 self.after(0, lambda: self._receive_preview(serial, seconds, image, None))
             except Exception as exc:
                 self.after(0, lambda error=exc: self._receive_preview(serial, seconds, None, error))
@@ -895,9 +964,9 @@ class BanglaSubtitleStudio(tk.Tk):
         self.status_var.set("Preview প্রস্তুত।")
 
     def _on_seek(self, value: str) -> None:
-        if not self.project.video_path:
+        if not self.project.video_path and not self.project.timeline.has_clips():
             return
-        seconds = max(0.0, min(float(value), self.project.duration))
+        seconds = max(0.0, min(float(value), self._active_duration()))
         self.current_time = seconds
         self._update_time_label()
         self._redraw_preview()
@@ -914,9 +983,60 @@ class BanglaSubtitleStudio(tk.Tk):
             self.start_playback()
 
     def start_playback(self) -> None:
-        if not self.project.video_path:
+        if not self.project.video_path and not self.project.timeline.has_clips():
             messagebox.showinfo(APP_NAME, "প্রথমে ভিডিও দিন।", parent=self)
             return
+        if self.project.timeline.has_clips():
+            if self.timeline_preview_dirty or not Path(self.timeline_preview_path).is_file():
+                self._render_timeline_playback_preview()
+                return
+            self._start_file_playback(self.timeline_preview_path, self._active_duration())
+            return
+        self._start_file_playback(self.project.video_path, self.project.duration)
+
+    def _render_timeline_playback_preview(self) -> None:
+        if self.busy:
+            return
+        self._set_busy(True)
+        self.busy_cancel.clear()
+        self.status_var.set("দ্রুত Timeline Playback Preview তৈরি হচ্ছে…")
+        preview_project = copy.deepcopy(self.project)
+        preview_project.timeline.width = 960
+        preview_project.timeline.height = 540
+        preview_project.subtitles = []
+        preview_project.logo.enabled = False
+        preview_project.color = ColorSettings()
+
+        def progress(value: float, message: str) -> None:
+            self.after(0, lambda: self._update_progress(value, "Playback Preview—" + message.split("—")[-1]))
+
+        def worker() -> None:
+            try:
+                export_timeline_project(
+                    preview_project,
+                    self.timeline_preview_path,
+                    "Preview",
+                    progress,
+                    self.busy_cancel,
+                )
+                self.after(0, lambda: self._finish_timeline_playback_preview(None))
+            except Exception as exc:
+                self.after(0, lambda error=exc: self._finish_timeline_playback_preview(error))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_timeline_playback_preview(self, error: Exception | None) -> None:
+        self._set_busy(False)
+        if error:
+            self.status_var.set(str(error))
+            messagebox.showerror("Timeline Preview হয়নি", str(error), parent=self)
+            return
+        self.timeline_preview_dirty = False
+        self.progress_var.set(100)
+        self.status_var.set("Timeline Playback Preview প্রস্তুত।")
+        self._start_file_playback(self.timeline_preview_path, self._active_duration())
+
+    def _start_file_playback(self, source_path: str, duration: float) -> None:
         self.stop_playback()
         try:
             ffmpeg = bundled_tool("ffmpeg")
@@ -924,16 +1044,17 @@ class BanglaSubtitleStudio(tk.Tk):
             messagebox.showerror(APP_NAME, str(exc), parent=self)
             return
         self.playing = True
+        self._playback_duration = max(0.1, duration)
         self.play_button.configure(text="⏸ থামান")
         self.status_var.set("ভিডিও Preview চলছে…")
         start = self.current_time
         width, height, fps = PREVIEW_SIZE[0], PREVIEW_SIZE[1], 20
         vf = f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x101827,fps={fps}"
-        command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}", "-i", self.project.video_path, "-an", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
+        command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}", "-i", source_path, "-an", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
         self.play_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, startupinfo=_startupinfo())
         try:
             ffplay = bundled_tool("ffplay")
-            self.audio_process = subprocess.Popen([ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet", "-ss", f"{start:.3f}", "-i", self.project.video_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=_startupinfo())
+            self.audio_process = subprocess.Popen([ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet", "-ss", f"{start:.3f}", "-i", source_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=_startupinfo())
         except MediaError:
             self.audio_process = None
 
@@ -981,9 +1102,15 @@ class BanglaSubtitleStudio(tk.Tk):
         if latest:
             self.last_frame, self.current_time = latest
             self.seek_var.set(self.current_time)
+            if self.project.timeline.has_clips() and hasattr(self, "timeline_editor"):
+                self.timeline_editor.playhead = self.current_time
+                self.timeline_editor.timeline_time_var.set(
+                    self.timeline_editor._clock(self.current_time)
+                )
+                self.timeline_editor.draw_timeline()
             self._update_time_label()
             self._redraw_preview()
-            if self.current_time >= self.project.duration:
+            if self.current_time >= self._playback_duration:
                 self.stop_playback()
                 return
         self.after(20, self._poll_playback)
@@ -1044,7 +1171,7 @@ class BanglaSubtitleStudio(tk.Tk):
 
     def _draw_logo(self, x0: float, y0: float, width: int, height: int) -> None:
         logo = self.project.logo
-        end = self.project.duration if logo.end < 0 else logo.end
+        end = self._active_duration() if logo.end < 0 else logo.end
         if not logo.enabled or not logo.path or not (logo.start <= self.current_time <= end):
             return
         try:
@@ -1268,6 +1395,8 @@ class BanglaSubtitleStudio(tk.Tk):
         self.text_voice_cancel_button.configure(
             state="normal" if value else "disabled"
         )
+        if hasattr(self, "timeline_editor"):
+            self.timeline_editor.set_busy(value)
         if not value:
             self.progress_var.set(0)
 
@@ -1407,6 +1536,7 @@ class BanglaSubtitleStudio(tk.Tk):
         style.margin_v = round(self.margin_var.get())
         style.max_chars = round(self.max_chars_var.get())
         style.show_secondary = self.show_secondary_var.get()
+        self.timeline_preview_dirty = True
         self._redraw_preview()
 
     def _choose_color(self, target: str) -> None:
@@ -1420,6 +1550,7 @@ class BanglaSubtitleStudio(tk.Tk):
         selected = colorchooser.askcolor(getattr(style, attr), parent=self)[1]
         if selected:
             setattr(style, attr, selected.upper())
+            self.timeline_preview_dirty = True
             self._redraw_preview()
 
     def choose_logo(self) -> None:
@@ -1439,6 +1570,7 @@ class BanglaSubtitleStudio(tk.Tk):
     def remove_logo(self) -> None:
         self.project.logo.path = ""
         self.project.logo.enabled = False
+        self.timeline_preview_dirty = True
         self.logo_name_label.configure(text="কোনো লোগো নেই")
         self._redraw_preview()
 
@@ -1447,11 +1579,13 @@ class BanglaSubtitleStudio(tk.Tk):
             return
         self.project.logo.scale_percent = self.logo_scale_var.get()
         self.project.logo.opacity = self.logo_opacity_var.get()
+        self.timeline_preview_dirty = True
         self._redraw_preview()
 
     def _set_logo_position(self, x: float, y: float) -> None:
         self.project.logo.x_percent = x
         self.project.logo.y_percent = y
+        self.timeline_preview_dirty = True
         self._redraw_preview()
 
     def _apply_logo_times(self) -> None:
@@ -1466,6 +1600,7 @@ class BanglaSubtitleStudio(tk.Tk):
             messagebox.showerror(APP_NAME, "লোগোর শেষ সময় শুরুর সময়ের পরে হতে হবে।", parent=self)
             return
         self.status_var.set("Logo timing Apply হয়েছে।")
+        self.timeline_preview_dirty = True
         self._redraw_preview()
 
     def apply_preset(self, name: str) -> None:
@@ -1496,6 +1631,7 @@ class BanglaSubtitleStudio(tk.Tk):
             temperature=self.temperature_var.get(),
             tint=self.tint_var.get(),
         )
+        self.timeline_preview_dirty = True
         self._redraw_preview()
 
     def choose_output(self) -> None:
@@ -1792,9 +1928,11 @@ class BanglaSubtitleStudio(tk.Tk):
             if engine == "organic"
             else "Human Emotion Text To Voice MP3 তৈরি হয়েছে।"
         )
+        if Path(output).is_file() and hasattr(self, "timeline_editor"):
+            self.timeline_editor.add_paths([output], auto_place=True)
         if messagebox.askyesno(
             "Text To Voice সম্পন্ন",
-            f"Voice তৈরি হয়েছে:\n{output}{fallback_note}\n\nFolder খুলবেন?",
+            f"Voice তৈরি হয়েছে এবং নতুন Audio layer-এ বসেছে:\n{output}{fallback_note}\n\nFolder খুলবেন?",
             parent=self,
         ):
             self._open_folder(output)
@@ -1910,6 +2048,7 @@ class BanglaSubtitleStudio(tk.Tk):
             messagebox.showerror(APP_NAME, str(exc), parent=self)
             return
         self.stop_playback()
+        previous_video = self.project.video_path
         self.project.video_path = output
         self.project.duration = float(info["duration"])
         self.project.width = int(info["width"])
@@ -1924,6 +2063,19 @@ class BanglaSubtitleStudio(tk.Tk):
         self.video_name_var.set(
             f"{Path(output).name}  •  {self.project.width}×{self.project.height}"
         )
+        for media in self.project.timeline.media:
+            if media.path and previous_video and Path(media.path).resolve() == Path(previous_video).resolve():
+                media.path = output
+                media.name = Path(output).name
+                media.kind = "video"
+                media.duration = float(info["duration"])
+                media.width = int(info["width"])
+                media.height = int(info["height"])
+                media.fps = float(info["fps"])
+                media.has_video = True
+                media.has_audio = True
+        self.timeline_preview_dirty = True
+        self.timeline_editor.refresh()
         self._capture_sync_baseline()
         self._refresh_subtitle_tree()
         self._update_time_label()
@@ -1944,15 +2096,22 @@ class BanglaSubtitleStudio(tk.Tk):
     def start_export(self) -> None:
         if self.busy:
             return
-        if not self.project.video_path:
-            messagebox.showinfo(APP_NAME, "প্রথমে ভিডিও দিন।", parent=self)
+        if not self.project.video_path and not self.project.timeline.has_clips():
+            messagebox.showinfo(APP_NAME, "প্রথমে Video/Audio Timeline-এ দিন।", parent=self)
             return
         output = self.output_var.get().strip() or self.project.default_output_path()
         if not output.lower().endswith(".mp4"):
             output += ".mp4"
         self.output_var.set(output)
-        if Path(output).resolve() == Path(self.project.video_path).resolve():
-            messagebox.showerror(APP_NAME, "মূল ভিডিওর ওপর Export করা যাবে না। অন্য নাম দিন।", parent=self)
+        source_paths = {
+            str(Path(media.path).resolve())
+            for media in self.project.timeline.media
+            if media.path
+        }
+        if self.project.video_path:
+            source_paths.add(str(Path(self.project.video_path).resolve()))
+        if str(Path(output).resolve()) in source_paths:
+            messagebox.showerror(APP_NAME, "মূল media file-এর ওপর Export করা যাবে না। অন্য নাম দিন।", parent=self)
             return
         self._apply_logo_times()
         self._sync_style()
@@ -2020,14 +2179,22 @@ class BanglaSubtitleStudio(tk.Tk):
         self.stop_playback()
         self.project = project
         self.project_path = path
+        self.timeline_editor.set_project(self.project)
         self._load_project_into_ui()
-        if self.project.video_path and Path(self.project.video_path).is_file():
-            self.seek_scale.configure(to=max(0.1, self.project.duration))
-            self.video_name_var.set(f"{Path(self.project.video_path).name}  •  {self.project.width}×{self.project.height}")
+        valid_timeline_media = any(
+            media.path and Path(media.path).is_file()
+            for media in self.project.timeline.media
+        )
+        if (self.project.video_path and Path(self.project.video_path).is_file()) or valid_timeline_media:
+            self.seek_scale.configure(to=max(0.1, self._active_duration()))
+            label_path = self.project.video_path or next(
+                media.path for media in self.project.timeline.media if media.path and Path(media.path).is_file()
+            )
+            self.video_name_var.set(f"{Path(label_path).name}  •  {self.project.width}×{self.project.height} • Timeline")
             self.request_preview(0)
         else:
             self._draw_placeholder()
-            messagebox.showwarning(APP_NAME, "Project খুলেছে, কিন্তু মূল ভিডিওটি আগের জায়গায় পাওয়া যায়নি। ভিডিওটি আবার নির্বাচন করুন।", parent=self)
+            messagebox.showwarning(APP_NAME, "Project খুলেছে, কিন্তু Timeline-এর media আগের জায়গায় পাওয়া যায়নি। Media আবার Import করুন।", parent=self)
         self.status_var.set("Project খোলা হয়েছে।")
 
     def _load_project_into_ui(self) -> None:
@@ -2058,9 +2225,12 @@ class BanglaSubtitleStudio(tk.Tk):
         self.output_var.set(self.project.output_path or self.project.default_output_path())
         self._capture_sync_baseline()
         self._refresh_subtitle_tree()
+        if hasattr(self, "timeline_editor"):
+            self.timeline_editor.set_project(self.project)
+        self.seek_scale.configure(to=max(0.1, self._active_duration()))
 
     def _update_time_label(self) -> None:
-        self.time_var.set(f"{format_srt_time(self.current_time)[:8]} / {format_srt_time(self.project.duration)[:8]}")
+        self.time_var.set(f"{format_srt_time(self.current_time)[:8]} / {format_srt_time(self._active_duration())[:8]}")
 
     def _on_close(self) -> None:
         if self.busy and not messagebox.askyesno(APP_NAME, "কাজ চলছে। বন্ধ করলে বর্তমান কাজ বাতিল হবে। বন্ধ করবেন?", parent=self):
@@ -2069,6 +2239,7 @@ class BanglaSubtitleStudio(tk.Tk):
         self.stop_playback()
         self.stop_text_voice_preview()
         Path(self.text_voice_preview_path).unlink(missing_ok=True)
+        Path(self.timeline_preview_path).unlink(missing_ok=True)
         self.destroy()
 
 

@@ -119,6 +119,11 @@ def export_project(
     progress: ProgressCallback | None = None,
     cancel_event: threading.Event | None = None,
 ) -> None:
+    if project.timeline.has_clips():
+        from .timeline_exporter import export_timeline_project
+
+        export_timeline_project(project, output_path, quality, progress, cancel_event)
+        return
     if not project.video_path or not Path(project.video_path).is_file():
         raise ExportError("প্রথমে একটি ভিডিও নির্বাচন করুন।")
     if project.logo.enabled and project.logo.path and not Path(project.logo.path).is_file():

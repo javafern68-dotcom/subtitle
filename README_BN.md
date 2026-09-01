@@ -1,4 +1,26 @@
-# Bangla Subtitle Studio V3.5.0 — Offline Organic CPU Voice
+# Bangla Subtitle Studio V4.0.0 — Professional Timeline Editor
+
+## V4.0.0-এর নতুন Professional Video Timeline
+
+- আগের V3.5-এর Subtitle, বহু ভাষার Translate, Voice Translate, Text To Voice, Organic Voice, Avro, Logo ও Color—সব একইভাবে রাখা হয়েছে।
+- নতুন `Media Bin` থেকে একসঙ্গে একাধিক Video, Audio ও Image Import করা যায়।
+- Video-গুলো V1 layer-এ পরপর বসানো অথবা Playhead-এর জায়গায় নতুন V2/V3 layer-এ বসানো যায়।
+- Video-এর original audio linked থাকে; video move, trim বা split করলে audio-ও একইভাবে পরিবর্তিত হয়।
+- আলাদা Audio Import করলে A1, A2, A3… layer নিজে তৈরি হয়।
+- Clip মাউস দিয়ে বামে/ডানে টানা, দুই পাশ trim, Playhead-এ split, delete এবং `Ripple Delete` দিয়ে ফাঁকা জায়গা বন্ধ করা যায়।
+- Video/Audio layer Add/Remove, Lock, Hide ও Mute করা যায়।
+- Clip-এর Start, Source In, Duration, Volume, Fade In ও Fade Out সংখ্যা দিয়ে নিয়ন্ত্রণ করা যায়।
+- Preview-তে সম্পূর্ণ Timeline দেখা যায়; Play করলে দ্রুত cached Timeline Preview তৈরি হয়।
+- Final Export-এ সব visible video/image layer, unmuted audio layer, Subtitle, Logo ও Color এক MP4-তে তৈরি হয়।
+- পুরোনো V2/V3 project খুলবে; V4 project-এ Media, Track, Clip ও সব Timeline settings Save থাকবে।
+
+### খুব সহজ ব্যবহার
+
+১. `+ Video` দিয়ে video দিন—প্রথম video V1 এবং তার audio A1-এ আসবে।
+২. আরেকটি video দিলে V1-এর শেষে বসবে; আলাদা layer চাইলে Media Bin থেকে সেটি নির্বাচন করে `Add New Layer` চাপুন।
+৩. `+ Audio` দিলে প্রতিটি আলাদা audio নতুন A-layer-এ আসবে।
+৪. Clip টেনে সরান; পাশের handle টেনে trim করুন; লাল Playhead বসিয়ে `Split` চাপুন।
+৫. `Final Timeline Export` চাপুন, file-এর নাম দিন, তারপর `Export Video` চাপুন।
 
 ## V3.5.0-এর Organic বাংলা AI Voice
 
@@ -130,12 +152,12 @@
 
 ## Install করার নিয়ম
 
-১. GitHub Release থেকে `Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe` download করুন।
+১. GitHub Release থেকে `Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.exe` download করুন।
 ২. Download করা file-এ double-click করুন।  
 ৩. Windows সতর্কতা দেখালে `More info` → `Run anyway` চাপুন।  
 ৪. Install শেষ হলে Desktop-এর `Bangla Subtitle Studio` icon খুলুন।
 
-আগের version install করা থাকলে সাধারণভাবে V3.5.0 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
+আগের version install করা থাকলে সাধারণভাবে V4.0.0 install করুন। পুরোনো version uninstall করার প্রয়োজন নেই।
 
 ## Voice Translate করার নিয়ম
 

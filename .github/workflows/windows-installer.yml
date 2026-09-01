@@ -222,6 +222,16 @@ jobs:
           $organicDuration = & "$app\_internal\tools\ffprobe.exe" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "offline-organic-bengali.mp3"
           if ([double]$organicDuration -lt 1.0) { throw "Offline Organic Bengali Voice is empty" }
           Write-Host "Verified Offline Organic Bengali female storytelling voice: $organicDuration seconds"
+          $timelineTest = Start-Process "$app\Bangla Subtitle Studio.exe" -ArgumentList @("--timeline-self-test", "professional-timeline-smoke.mp4") -Wait -PassThru
+          if ($timelineTest.ExitCode -ne 0) {
+            if (Test-Path "professional-timeline-smoke.mp4.test.log") {
+              Get-Content "professional-timeline-smoke.mp4.test.log" -Raw -Encoding UTF8
+            }
+            throw "Packaged Professional Timeline self-test failed"
+          }
+          if (!(Test-Path "professional-timeline-smoke.mp4") -or (Get-Item "professional-timeline-smoke.mp4").Length -lt 10000) { throw "Professional Timeline output missing" }
+          Get-Content "professional-timeline-smoke.mp4.test.log" -Raw -Encoding UTF8
+          Write-Host "Verified packaged two-video, linked-audio and separate music-layer Timeline export"
           $env:PYTHONUTF8 = "1"
           @'
           from bangla_subtitle_studio.voice_translate import _online_voice, _save_speech
@@ -250,12 +260,12 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "BanglaSubtitleStudio.iss"
-          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe")) { throw "Setup EXE missing" }
+          if (!(Test-Path "installer\Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.exe")) { throw "Setup EXE missing" }
 
       - name: Create checksum
         shell: pwsh
         run: |
-          (Get-FileHash "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.sha256.txt" -Encoding ascii
+          (Get-FileHash "installer\Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.exe" -Algorithm SHA256).Hash.ToLower() | Out-File "installer\Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.sha256.txt" -Encoding ascii
 
       - name: Publish Offline installer in GitHub Releases
         shell: pwsh
@@ -263,30 +273,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v3.5.0"
+          $tag = "v4.0.0"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag `
-              "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe" `
-              "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.exe" `
+              "installer\Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.sha256.txt" `
               --target "${{ github.sha }}" `
-              --title "Bangla Subtitle Studio V3.5.0 Offline Organic CPU Voice" `
-              --notes "Adds a bundled Offline Organic Bengali AI Voice engine with female and male voices and native Conversation, Happy, Angry, Sad, News and Story/Book styles. It runs on CPU for 16 GB RAM computers with low-VRAM GPUs, so it is slower but needs no internet, API key or per-voice payment. A Voice Engine selector keeps the fast Microsoft Natural Online voices for English, Hindi, Arabic, Urdu and Bengali. Speed, Pitch, Emotion Strength, natural pauses, preview, subtitles, clean Avro and Voice Translate remain intact. The packaged installer verifies a real Bengali storytelling MP3 before release and installs over earlier versions."
+              --title "Bangla Subtitle Studio V4.0.0 Professional Timeline Editor" `
+              --notes "Adds a Filmora-style professional multi-track timeline while retaining every V3.5 subtitle, translation, dubbing, Text To Voice, Organic Voice, logo and color feature. Import multiple videos, audio files and images into a Media Bin; place videos sequentially or on new V1/V2 layers; create A1/A2 audio layers automatically; drag clips left or right; trim either edge; split at the playhead; delete with optional ripple; lock, hide or mute tracks; and control volume plus fade-in/fade-out. Final FFmpeg export composites all video layers and mixes every audio layer with subtitles, logo and color. The packaged EXE must create and verify a real two-video, three-audio-track MP4 before release."
           }
           else {
             gh release upload $tag `
-              "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe" `
-              "installer\Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.sha256.txt" `
+              "installer\Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.exe" `
+              "installer\Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.sha256.txt" `
               --clobber
           }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bangla-Subtitle-Studio-Organic-CPU-Voice-Setup-V3.5.0
+          name: Bangla-Subtitle-Studio-Professional-Timeline-Setup-V4.0.0
           path: |
-            installer/Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe
-            installer/Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.sha256.txt
+            installer/Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.exe
+            installer/Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.sha256.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

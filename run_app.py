@@ -1,4 +1,5 @@
 import re
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -7,9 +8,10 @@ from array import array
 from pathlib import Path
 
 from bangla_subtitle_studio.app import main
-from bangla_subtitle_studio.media import extract_audio_chunk, probe_video
-from bangla_subtitle_studio.models import SubtitleSegment
+from bangla_subtitle_studio.media import bundled_tool, extract_audio_chunk, probe_media, probe_video
+from bangla_subtitle_studio.models import Project, SubtitleSegment, TimelineMedia
 from bangla_subtitle_studio.subtitles import parse_srt
+from bangla_subtitle_studio.timeline_exporter import export_timeline_project
 from bangla_subtitle_studio.translation import (
     _format_avro_text,
     _select_valid_target_candidate,
@@ -219,6 +221,130 @@ def organic_voice_self_test(output_audio: str) -> None:
         raise RuntimeError(f"Organic engine status is invalid: {engine}")
 
 
+def timeline_self_test(output_video: str) -> None:
+    log_path = Path(output_video + ".test.log")
+    lines: list[str] = []
+    try:
+        ffmpeg = bundled_tool("ffmpeg")
+        with tempfile.TemporaryDirectory(prefix="timeline_self_test_") as temp_dir:
+            root = Path(temp_dir)
+            source_paths = [root / "video-one.mp4", root / "video-two.mp4"]
+            colors = ["0xD64B4B", "0x246BCE"]
+            tones = [440, 660]
+            for source, color, tone in zip(source_paths, colors, tones):
+                completed = subprocess.run(
+                    [
+                        ffmpeg,
+                        "-y",
+                        "-hide_banner",
+                        "-loglevel",
+                        "error",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        f"color=c={color}:s=640x360:r=25:d=1.1",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        f"sine=frequency={tone}:duration=1.1",
+                        "-c:v",
+                        "libx264",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-c:a",
+                        "aac",
+                        "-shortest",
+                        str(source),
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                if completed.returncode != 0:
+                    raise RuntimeError(completed.stderr.decode("utf-8", "replace"))
+            music = root / "music.wav"
+            completed = subprocess.run(
+                [
+                    ffmpeg,
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=220:duration=2.2",
+                    str(music),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            if completed.returncode != 0:
+                raise RuntimeError(completed.stderr.decode("utf-8", "replace"))
+            project = Project(width=640, height=360, fps=25)
+            project.timeline.width = 640
+            project.timeline.height = 360
+            for source in source_paths:
+                info = probe_media(str(source))
+                media = project.timeline.add_media(
+                    TimelineMedia(
+                        path=str(source),
+                        name=source.name,
+                        kind="video",
+                        duration=float(info["duration"]),
+                        width=int(info["width"]),
+                        height=int(info["height"]),
+                        fps=float(info["fps"]),
+                        has_video=True,
+                        has_audio=True,
+                    )
+                )
+                project.timeline.add_clip(media.id)
+            music_info = probe_media(str(music))
+            music_media = project.timeline.add_media(
+                TimelineMedia(
+                    path=str(music),
+                    name=music.name,
+                    kind="audio",
+                    duration=float(music_info["duration"]),
+                    has_video=False,
+                    has_audio=True,
+                )
+            )
+            music_track = project.timeline.add_track("audio")
+            music_clip = project.timeline.add_clip(
+                music_media.id,
+                music_track.id,
+                start=0.0,
+                add_linked_audio=False,
+            )[0]
+            music_clip.volume = 0.20
+            music_clip.fade_in = 0.15
+            music_clip.fade_out = 0.15
+            export_timeline_project(project, output_video, "Preview")
+            result = probe_media(output_video)
+            if not Path(output_video).is_file() or Path(output_video).stat().st_size < 10_000:
+                raise RuntimeError("Packaged Timeline MP4 was not created")
+            if not result["has_video"] or not result["has_audio"]:
+                raise RuntimeError(f"Timeline streams are incomplete: {result}")
+            if float(result["duration"]) < 2.0:
+                raise RuntimeError(f"Timeline output is too short: {result}")
+            lines.extend(
+                [
+                    f"Timeline clips: {len(project.timeline.clips)}",
+                    f"Timeline tracks: {len(project.timeline.tracks)}",
+                    f"Output: {result}",
+                    "Verified two sequential videos, linked source audio and a separate mixed audio layer.",
+                ]
+            )
+            log_path.write_text("\n".join(lines), encoding="utf-8")
+    except Exception:
+        lines.append(traceback.format_exc())
+        log_path.write_text("\n".join(lines), encoding="utf-8")
+        raise
+
+
 if __name__ == "__main__":
     if "--srt-self-test" in sys.argv:
         try:
@@ -250,6 +376,13 @@ if __name__ == "__main__":
         try:
             option_index = sys.argv.index("--organic-voice-self-test")
             organic_voice_self_test(sys.argv[option_index + 1])
+        except Exception:
+            traceback.print_exc()
+            sys.exit(1)
+    elif "--timeline-self-test" in sys.argv:
+        try:
+            option_index = sys.argv.index("--timeline-self-test")
+            timeline_self_test(sys.argv[option_index + 1])
         except Exception:
             traceback.print_exc()
             sys.exit(1)

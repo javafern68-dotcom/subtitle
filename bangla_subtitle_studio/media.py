@@ -50,15 +50,25 @@ def check_ffmpeg() -> tuple[str, str]:
 
 
 def probe_video(path: str) -> dict[str, float | int]:
+    info = probe_media(path)
+    if not info["has_video"]:
+        raise MediaError("ফাইলটিতে কোনো ভিডিও stream নেই।")
+    return {
+        "width": int(info["width"]),
+        "height": int(info["height"]),
+        "fps": float(info["fps"]),
+        "duration": float(info["duration"]),
+    }
+
+
+def probe_media(path: str) -> dict[str, float | int | bool]:
     _, ffprobe = check_ffmpeg()
     command = [
         ffprobe,
         "-v",
         "error",
-        "-select_streams",
-        "v:0",
         "-show_entries",
-        "stream=width,height,r_frame_rate:format=duration",
+        "stream=codec_type,width,height,r_frame_rate:format=duration",
         "-of",
         "json",
         path,
@@ -71,20 +81,28 @@ def probe_video(path: str) -> dict[str, float | int]:
         check=False,
     )
     if completed.returncode != 0:
-        raise MediaError(completed.stderr.decode("utf-8", "replace").strip() or "ভিডিও পড়া যায়নি।")
+        raise MediaError(completed.stderr.decode("utf-8", "replace").strip() or "Media পড়া যায়নি।")
     try:
         data = json.loads(completed.stdout.decode("utf-8"))
-        stream = data["streams"][0]
-        numerator, denominator = str(stream.get("r_frame_rate", "25/1")).split("/", 1)
+        streams = data.get("streams", [])
+        video_stream = next(
+            (stream for stream in streams if stream.get("codec_type") == "video"),
+            None,
+        )
+        has_audio = any(stream.get("codec_type") == "audio" for stream in streams)
+        rate = str((video_stream or {}).get("r_frame_rate", "25/1"))
+        numerator, denominator = rate.split("/", 1)
         fps = float(numerator) / max(float(denominator), 1e-9)
         return {
-            "width": int(stream["width"]),
-            "height": int(stream["height"]),
+            "width": int((video_stream or {}).get("width", 0)),
+            "height": int((video_stream or {}).get("height", 0)),
             "fps": fps,
             "duration": float(data.get("format", {}).get("duration", 0.0)),
+            "has_video": video_stream is not None,
+            "has_audio": has_audio,
         }
     except (KeyError, ValueError, IndexError, TypeError, json.JSONDecodeError) as exc:
-        raise MediaError("ভিডিওর তথ্য পড়া যায়নি।") from exc
+        raise MediaError("Media file-এর তথ্য পড়া যায়নি।") from exc
 
 
 def extract_frame(path: str, seconds: float, width: int = 960, height: int = 540) -> Image.Image:

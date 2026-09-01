@@ -1,4 +1,17 @@
-# Bangla Subtitle Studio V3.5.0 Offline Organic CPU Voice
+# Bangla Subtitle Studio V4.0.0 Professional Timeline Editor
+
+## V4.0.0 professional multi-track video editor
+
+- A Filmora-style timeline is now built into the existing Subtitle Studio; every V3.5 feature remains available.
+- Import multiple videos, audio files and images into a Media Bin.
+- Put videos sequentially on V1 or at the playhead on new V2/V3 layers.
+- A video's source audio stays linked while moving, trimming or splitting; separate audio imports automatically create A1/A2/A3 layers.
+- Drag clips left/right, trim either edge, split at the playhead, delete, and optionally close the gap with Ripple Delete.
+- Add/remove, lock, hide and mute tracks; adjust clip start, source-in, duration, volume, fade-in and fade-out precisely.
+- Timeline frame preview and cached playback preview show the assembled edit before export.
+- Final FFmpeg export composites all visible video/image layers and mixes all unmuted audio layers with the existing subtitles, logo and color correction.
+- V4 project files preserve the complete Media Bin, tracks, clips and settings; older V2/V3 project files remain compatible.
+- The Windows release is blocked unless the packaged EXE creates and verifies a real two-video, linked-audio and separate-music timeline MP4.
 
 ## V3.5.0 organic Bengali AI voice
 
@@ -115,7 +128,7 @@ The installer contains the more accurate 424 MB Bengali speech model, a multilin
 
 ## Download
 
-Download `Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0.exe` from the `v3.5.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
+Download `Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0.exe` from the `v4.0.0` GitHub Release and install it normally. Earlier installations can be upgraded because the installer keeps the same application identity.
 
 ## Developer build
 
@@ -136,6 +149,7 @@ The GitHub Actions workflow builds and bundles:
 - packaged real Google Bengali fallback-audio test
 - packaged real Offline Organic Bengali storytelling-voice test
 - packaged full Hindi-voice-to-Bengali-voice video test using an online natural target voice
+- packaged real two-video, linked-source-audio and independent music-layer timeline export test
 - Inno Setup installer and SHA-256 checksum
 
 Complete Bangla usage instructions: [README_BN.md](README_BN.md)

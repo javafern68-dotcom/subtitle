@@ -1,5 +1,5 @@
 #define MyAppName "Bangla Subtitle Studio"
-#define MyAppVersion "3.5.0"
+#define MyAppVersion "4.0.0"
 #define MyAppPublisher "Bangla Subtitle Studio"
 #define MyAppExeName "Bangla Subtitle Studio.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 OutputDir=installer
-OutputBaseFilename=Bangla_Subtitle_Studio_Organic_CPU_Voice_Setup_V3.5.0
+OutputBaseFilename=Bangla_Subtitle_Studio_Professional_Timeline_Setup_V4.0.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -22,7 +22,7 @@ SetupIconFile=app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
-VersionInfoDescription=Free offline Bangla subtitle, logo and color editor
+VersionInfoDescription=Professional multi-track video editor with offline Bangla subtitle and voice tools
 VersionInfoProductName={#MyAppName}
 
 [Files]
